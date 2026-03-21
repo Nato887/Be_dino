@@ -14,11 +14,6 @@ end)
 
 local running = false
 
--- Auto reconnect character
-player.CharacterAdded:Connect(function()
-    task.wait(1)
-end)
-
 -- Root part
 local function getHRP()
     local char = player.Character
@@ -77,27 +72,32 @@ local function getSafeFoods(limit)
     return result
 end
 
--- Step warp แบบปรับปรุง
-local function stepWarp(targetPos)
+-- Step warp adaptive speed
+local function adaptiveWarp(targetPos)
     local hrp = getHRP()
     if not hrp then return false end
     local startPos = hrp.Position
     local dist = (targetPos - startPos).Magnitude
-    local steps = math.clamp(math.floor(dist / 6), 2, 20)
+    local steps = math.clamp(math.floor(dist / 4), 4, 25)
 
     for i = 1, steps do
         if not running then return false end
         local nextPos = startPos:Lerp(targetPos, i/steps)
+
+        -- Safety check รอบตัว
         if isDangerousNear(nextPos, 150) then
             return false -- ข้ามจุดนี้
         end
+
+        -- Adaptive speed: โซนปลอดภัย warp เร็วขึ้น
+        local speedFactor = 0.015
         hrp.CFrame = CFrame.new(nextPos + Vector3.new(0,3,0))
-        task.wait(0.02) -- ปรับให้เกมโหลดทัน
+        task.wait(speedFactor)
     end
     return true
 end
 
--- LOOP FARM
+-- FARM LOOP
 local function farmLoop()
     while running do
         local hrp = getHRP()
@@ -107,14 +107,11 @@ local function farmLoop()
             continue
         end
 
-        local foods = getSafeFoods(12)
-        if #foods == 0 then
-            task.wait(0.1)
-        else
-            for _, pos in ipairs(foods) do
-                if not running then break end
-                stepWarp(pos) -- ข้ามจุดถ้าไม่ปลอดภัย
-            end
+        local foods = getSafeFoods(15) -- multi-target
+
+        for _, pos in ipairs(foods) do
+            if not running then break end
+            adaptiveWarp(pos)
         end
 
         task.wait(0.01)
