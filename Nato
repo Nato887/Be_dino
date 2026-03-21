@@ -18,33 +18,25 @@ local running   = false
 local tweenSpeed = 100
 local moverConn  = nil
 
--- ── Get Root ──
+-- Root
 local function getHRP()
     local char = player.Character
     if not char then return nil end
-    for _, v in ipairs(char:GetChildren()) do
-        if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
-            return v
-        end
-    end
-    return char.PrimaryPart
+    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
-    local best, bestDist = nil, math.huge
+
+    local best, dist = nil, math.huge
     for _, food in CollectionService:GetTagged("Food") do
-        if not food or not food.Parent then continue end
-        local ok, pos = pcall(function()
-            if food:IsA("Model") then return food:GetPivot().Position
-            elseif food:IsA("BasePart") then return food.Position end
-        end)
-        if ok and pos then
+        if food and food.Parent then
+            local pos = food:IsA("Model") and food:GetPivot().Position or food.Position
             local d = (hrp.Position - pos).Magnitude
-            if d < bestDist then
-                bestDist = d
-                best = { instance = food, position = pos }
+            if d < dist then
+                dist = d
+                best = {instance = food, position = pos}
             end
         end
     end
@@ -52,143 +44,133 @@ local function getClosestFood()
 end
 
 local function stopMover()
-    if moverConn then moverConn:Disconnect(); moverConn = nil end
+    if moverConn then moverConn:Disconnect() moverConn = nil end
 end
 
-local function moveTo(targetPos)
+local function moveTo(pos)
     local reached = false
     stopMover()
+
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
-        if not hrp or not running then reached = true; stopMover(); return end
-        local diff = targetPos - hrp.Position
+        if not hrp or not running then reached = true stopMover() return end
+
+        local diff = pos - hrp.Position
         local dist = diff.Magnitude
-        if dist < 2 then reached = true; stopMover(); return end
-        local step = math.min(tweenSpeed * dt, dist)
-        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
+
+        if dist < 2 then reached = true stopMover() return end
+
+        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * math.min(dist, tweenSpeed*dt))
     end)
-    while not reached do task.wait(0.05) end
+
+    while not reached do task.wait() end
 end
 
--- ── GUI ──
-local gui = Instance.new("ScreenGui")
-gui.Name = "FoodCollector"
-gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
-
--- Toggle Button
-local toggleBtn = Instance.new("TextButton", gui)
-toggleBtn.Size = UDim2.new(0, 120, 0, 40)
-toggleBtn.Position = UDim2.new(0, 20, 0, 20)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(40,40,60)
-toggleBtn.Text = "Toggle GUI"
-toggleBtn.TextColor3 = Color3.new(1,1,1)
+-- GUI
+local gui = Instance.new("ScreenGui", player.PlayerGui)
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0, 270, 0, 215)
-panel.Position = UDim2.new(0.5, -135, 0.5, -107)
-panel.BackgroundColor3 = Color3.fromRGB(18,18,28)
+panel.Size = UDim2.new(0,260,0,200)
+panel.Position = UDim2.new(0.5,-130,0.5,-100)
+panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
 panel.Active = true
 panel.Draggable = true
 
-local guiVisible = true
-toggleBtn.MouseButton1Click:Connect(function()
-    guiVisible = not guiVisible
-    panel.Visible = guiVisible
-end)
+-- Status
+local status = Instance.new("TextLabel", panel)
+status.Size = UDim2.new(1,0,0,30)
+status.Text = "Status: Idle"
+status.BackgroundTransparency = 1
+status.TextColor3 = Color3.new(1,1,1)
 
-local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1,0,0,30)
-title.Text = "🦖 Food Collector"
-title.BackgroundTransparency = 1
-title.TextColor3 = Color3.new(1,1,1)
-
-local statusLbl = Instance.new("TextLabel", panel)
-statusLbl.Position = UDim2.new(0,10,0,40)
-statusLbl.Size = UDim2.new(1,-20,0,20)
-statusLbl.BackgroundTransparency = 1
-statusLbl.Text = "Status: Idle"
-
+-- Speed label
 local speedLbl = Instance.new("TextLabel", panel)
-speedLbl.Position = UDim2.new(0,10,0,70)
-speedLbl.Size = UDim2.new(1,-20,0,20)
+speedLbl.Position = UDim2.new(0,0,0,30)
+speedLbl.Size = UDim2.new(1,0,0,25)
 speedLbl.BackgroundTransparency = 1
 speedLbl.Text = "Speed: 100"
 
 -- Slider
 local track = Instance.new("Frame", panel)
+track.Position = UDim2.new(0,10,0,70)
 track.Size = UDim2.new(1,-20,0,8)
-track.Position = UDim2.new(0,10,0,100)
+track.BackgroundColor3 = Color3.fromRGB(60,60,80)
 
 local fill = Instance.new("Frame", track)
-fill.Size = UDim2.new(tweenSpeed/1000,0,1,0)
+fill.Size = UDim2.new(0.1,0,1,0)
+fill.BackgroundColor3 = Color3.fromRGB(100,170,255)
 
-local knob = Instance.new("TextButton", track)
-knob.Size = UDim2.new(0,20,0,20)
-knob.Position = UDim2.new(tweenSpeed/1000,-10,0.5,-10)
+local knob = Instance.new("Frame", track)
+knob.Size = UDim2.new(0,18,0,18)
+knob.Position = UDim2.new(0.1,-9,0.5,-9)
+knob.BackgroundColor3 = Color3.new(1,1,1)
 
 local dragging = false
 
-knob.MouseButton1Down:Connect(function() dragging = true end)
-knob.TouchStarted:Connect(function() dragging = true end)
+local function updateSlider(x)
+    local ratio = math.clamp((x - track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+    tweenSpeed = math.floor(ratio * 1000)
+    fill.Size = UDim2.new(ratio,0,1,0)
+    knob.Position = UDim2.new(ratio,-9,0.5,-9)
+    speedLbl.Text = "Speed: "..tweenSpeed
+end
 
-UserInputService.InputEnded:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1
-    or i.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
+-- รองรับกดทั้งแถบ
+track.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        updateSlider(i.Position.X)
     end
 end)
 
 UserInputService.InputChanged:Connect(function(i)
-    if not dragging then return end
-    if i.UserInputType ~= Enum.UserInputType.MouseMovement
-    and i.UserInputType ~= Enum.UserInputType.Touch then return end
+    if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+        updateSlider(i.Position.X)
+    end
+end)
 
-    local ratio = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X,0,1)
-    tweenSpeed = math.floor(ratio * 1000)
-    fill.Size = UDim2.new(ratio,0,1,0)
-    knob.Position = UDim2.new(ratio,-10,0.5,-10)
-    speedLbl.Text = "Speed: "..tweenSpeed
+UserInputService.InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
 end)
 
 -- Buttons
 local startBtn = Instance.new("TextButton", panel)
-startBtn.Position = UDim2.new(0,10,0,140)
-startBtn.Size = UDim2.new(0,120,0,40)
-startBtn.Text = "Start"
+startBtn.Position = UDim2.new(0,10,0,120)
+startBtn.Size = UDim2.new(0,110,0,40)
+startBtn.Text = "START"
+startBtn.BackgroundColor3 = Color3.fromRGB(50,180,80)
 
 local stopBtn = Instance.new("TextButton", panel)
-stopBtn.Position = UDim2.new(0,140,0,140)
-stopBtn.Size = UDim2.new(0,120,0,40)
-stopBtn.Text = "Stop"
-
-local function setStatus(t)
-    statusLbl.Text = "Status: "..t
-end
+stopBtn.Position = UDim2.new(0,130,0,120)
+stopBtn.Size = UDim2.new(0,110,0,40)
+stopBtn.Text = "STOP"
+stopBtn.BackgroundColor3 = Color3.fromRGB(180,60,60)
 
 local function loop()
     while running do
         local food = getClosestFood()
         if food then
-            setStatus("Going "..food.instance.Name)
+            status.Text = "Going: "..food.instance.Name
             moveTo(food.position)
         else
-            setStatus("No food")
+            status.Text = "No food"
             task.wait(0.3)
         end
     end
+    status.Text = "Stopped"
 end
 
 startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
+    status.Text = "Running"
     task.spawn(loop)
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
     running = false
     stopMover()
-    setStatus("Stopped")
+    status.Text = "Stopped"
 end)
-
-setStatus("Idle")
