@@ -77,21 +77,32 @@ local function getSafeFoods(limit)
     return result
 end
 
--- Warp step
-local function stepWarp(targetPos)
+-- Step warp แบบ adaptive speed
+local function adaptiveWarp(targetPos)
     local hrp = getHRP()
     if not hrp then return false end
     local startPos = hrp.Position
     local dist = (targetPos - startPos).Magnitude
     local steps = math.clamp(math.floor(dist / 6), 2, 25)
+
     for i = 1, steps do
         if not running then return false end
         local nextPos = startPos:Lerp(targetPos, i/steps)
-        if isDangerousNear(nextPos) then
+        local safeRadius = 150
+        -- ถ้าโซนโล่ง ให้ warp มากขึ้น
+        for r = 50, 200, 50 do
+            if not isDangerousNear(nextPos, r) then
+                safeRadius = r
+            else
+                safeRadius = r
+                break
+            end
+        end
+        if isDangerousNear(nextPos, safeRadius) then
             return false
         end
         hrp.CFrame = CFrame.new(nextPos + Vector3.new(0,3,0))
-        task.wait(0.015)
+        task.wait(0.01 / (safeRadius/50)) -- warp adaptive speed
     end
     return true
 end
@@ -113,7 +124,7 @@ local function farmLoop()
         else
             for _, pos in ipairs(foods) do
                 if not running then break end
-                local success = stepWarp(pos)
+                local success = adaptiveWarp(pos)
                 if not success then
                     task.wait(0.05)
                 end
