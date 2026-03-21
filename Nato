@@ -1,13 +1,12 @@
+-- ── บริการหลัก ──
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local running = false
-local tweenSpeed = 100
-local currentTween = nil
+local speed = 100 -- ระยะ teleport ต่อ step
 local targetFood = nil
 
 -- ── ฟังก์ชันพื้นฐาน ──
@@ -57,20 +56,18 @@ Instance.new("UICorner", title)
 local speedLbl = Instance.new("TextLabel", panel)
 speedLbl.Size = UDim2.new(1, 0, 0, 25)
 speedLbl.Position = UDim2.new(0, 0, 0, 40)
-speedLbl.Text = "Speed: " .. tweenSpeed
+speedLbl.Text = "Speed: " .. speed
 speedLbl.TextColor3 = Color3.new(1,1,1)
 speedLbl.BackgroundTransparency = 1
 
--- ── Slider มือถือ ──
+-- Slider มือถือ
 local sliderBg = Instance.new("Frame", panel)
 sliderBg.Size = UDim2.new(0.8, 0, 0, 15)
 sliderBg.Position = UDim2.new(0.1, 0, 0, 70)
 sliderBg.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-
 local sliderFill = Instance.new("Frame", sliderBg)
-sliderFill.Size = UDim2.new(tweenSpeed/500, 0, 1, 0)
+sliderFill.Size = UDim2.new(speed/500, 0, 1, 0)
 sliderFill.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
-
 local sliderBtn = Instance.new("TextButton", sliderBg)
 sliderBtn.Size = UDim2.new(1, 0, 1, 0)
 sliderBtn.BackgroundTransparency = 1
@@ -79,9 +76,9 @@ sliderBtn.Text = ""
 local function updateSlider(input)
     local inputPos = input.Position.X
     local relX = math.clamp((inputPos - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
-    tweenSpeed = math.max(10, math.floor(relX * 500))
+    speed = math.max(10, math.floor(relX * 500))
     sliderFill.Size = UDim2.new(relX, 0, 1, 0)
-    speedLbl.Text = "Speed: " .. tweenSpeed
+    speedLbl.Text = "Speed: " .. speed
 end
 
 sliderBtn.InputBegan:Connect(function(input)
@@ -91,7 +88,6 @@ sliderBtn.InputBegan:Connect(function(input)
             local currentInput = UserInputService:GetMouseLocation()
             updateSlider({Position = currentInput})
         end)
-        
         local endRef
         endRef = UserInputService.InputEnded:Connect(function(inputEnd)
             if inputEnd.UserInputType == Enum.UserInputType.Touch or inputEnd.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -102,7 +98,7 @@ sliderBtn.InputBegan:Connect(function(input)
     end
 end)
 
--- ── ปุ่ม Start/Stop ──
+-- ปุ่ม Start/Stop
 local startBtn = Instance.new("TextButton", panel)
 startBtn.Size = UDim2.new(0.8, 0, 0, 40)
 startBtn.Position = UDim2.new(0.1, 0, 0, 100)
@@ -110,14 +106,13 @@ startBtn.Text = "START"
 startBtn.TextColor3 = Color3.new(1,1,1)
 startBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 50)
 Instance.new("UICorner", startBtn)
-
 startBtn.MouseButton1Click:Connect(function()
     running = not running
     startBtn.Text = running and "STOP" or "START"
     startBtn.BackgroundColor3 = running and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(0, 180, 50)
 end)
 
--- ── ปุ่มเปิด/ปิดเมนู ──
+-- ปุ่มเปิด/ปิดเมนู
 local toggle = Instance.new("TextButton", gui)
 toggle.Size = UDim2.new(0, 45, 0, 45)
 toggle.Position = UDim2.new(0.02, 0, 0.4, 0)
@@ -125,15 +120,14 @@ toggle.Text = "MENU"
 toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 toggle.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", toggle).CornerRadius = UDim.new(1, 0)
-
 toggle.MouseButton1Click:Connect(function()
     panel.Visible = not panel.Visible
 end)
 
--- ── ระบบเดิน Tween ใหม่ ──
+-- ── ระบบ Teleport Step ต่อเนื่อง ──
 task.spawn(function()
     while true do
-        task.wait(0.1)
+        RunService.RenderStepped:Wait()
         if running then
             local hrp = getHRP()
             if not hrp then continue end
@@ -145,28 +139,29 @@ task.spawn(function()
 
             if targetFood and targetFood.instance and targetFood.instance.Parent then
                 local targetPos = Vector3.new(targetFood.position.X, hrp.Position.Y, targetFood.position.Z)
-                local dist = (hrp.Position - targetPos).Magnitude
+                local direction = targetPos - hrp.Position
+                local dist = direction.Magnitude
 
-                if dist > 2 then
-                    if currentTween then
-                        currentTween:Cancel()
-                        currentTween = nil
+                if dist > 0.5 then
+                    local stepDistance = math.min(speed * 0.05, dist)
+                    local moveVector = direction.Unit * stepDistance
+
+                    -- ตรวจสอบผู้เล่นอื่น
+                    for _, other in ipairs(Players:GetPlayers()) do
+                        if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+                            local otherPos = other.Character.HumanoidRootPart.Position
+                            if (hrp.Position + moveVector - otherPos).Magnitude < 3 then
+                                moveVector = Vector3.new(0, 0, 0) -- หยุดถ้าชน
+                                break
+                            end
+                        end
                     end
-                    -- ใช้ CFrame.lookAt เพื่อหันหน้าไปหาเป้าหมาย
-                    local info = TweenInfo.new(dist / tweenSpeed, Enum.EasingStyle.Linear)
-                    currentTween = TweenService:Create(hrp, info, {CFrame = CFrame.lookAt(hrp.Position, targetPos)})
-                    currentTween:Play()
-                    currentTween.Completed:Wait()
+
+                    hrp.CFrame = CFrame.lookAt(hrp.Position + moveVector, targetPos)
                 else
                     targetFood = nil
                 end
             end
-        else
-            if currentTween then
-                currentTween:Cancel()
-                currentTween = nil
-            end
-            targetFood = nil
         end
     end
 end)
