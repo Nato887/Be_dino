@@ -5,6 +5,10 @@ local VirtualUser       = game:GetService("VirtualUser")
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
+-- ⚙️ ระยะวงเก็บ (ปรับได้)
+local COLLECT_RADIUS = 25
+local SAFE_RADIUS = 150
+
 -- Anti AFK
 player.Idled:Connect(function()
     VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
@@ -14,16 +18,16 @@ end)
 
 local running = false
 
--- Root part
+-- Root
 local function getHRP()
     local char = player.Character
     if not char then return nil end
     return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- ตรวจผู้เล่นใกล้
+-- ตรวจผู้เล่นรอบตัว
 local function isDangerousNear(pos, radius)
-    radius = radius or 150
+    radius = radius or SAFE_RADIUS
     local myChar = player.Character
     if not myChar then return false end
     local myHum = myChar:FindFirstChildOfClass("Humanoid")
@@ -34,8 +38,7 @@ local function isDangerousNear(pos, radius)
             local root = plr.Character:FindFirstChild("HumanoidRootPart")
             local hum  = plr.Character:FindFirstChildOfClass("Humanoid")
             if root and hum then
-                local dist = (root.Position - pos).Magnitude
-                if dist < radius and hum.Health > myHum.Health then
+                if (root.Position - pos).Magnitude < radius and hum.Health > myHum.Health then
                     return true
                 end
             end
@@ -44,11 +47,14 @@ local function isDangerousNear(pos, radius)
     return false
 end
 
--- หาอาหารปลอดภัย
-local function getSafeFoods(limit)
+-- หาอาหาร
+local function getFoods()
     local hrp = getHRP()
     if not hrp then return {} end
-    local foods = {}
+
+    local inRange = {}
+    local near = {}
+
     for _, food in ipairs(CollectionService:GetTagged("Food")) do
         if food and food.Parent then
             local pos
@@ -57,48 +63,60 @@ local function getSafeFoods(limit)
             elseif food:IsA("BasePart") then
                 pos = food.Position
             end
-            if pos and not isDangerousNear(pos,150) then
-                table.insert(foods, {instance = food, position = pos})
+
+            if pos and not isDangerousNear(pos,SAFE_RADIUS) then
+                local dist = (hrp.Position - pos).Magnitude
+
+                if dist <= COLLECT_RADIUS then
+                    table.insert(inRange, {instance = food, position = pos})
+                else
+                    table.insert(near, {instance = food, position = pos, dist = dist})
+                end
             end
         end
     end
-    table.sort(foods, function(a,b)
-        return (a.position - hrp.Position).Magnitude < (b.position - hrp.Position).Magnitude
+
+    if #inRange > 0 then
+        return inRange
+    end
+
+    table.sort(near, function(a,b)
+        return a.dist < b.dist
     end)
+
     local result = {}
-    for i=1, math.min(limit, #foods) do
-        table.insert(result, foods[i])
+    for i=1, math.min(10, #near) do
+        table.insert(result, near[i])
     end
     return result
 end
 
--- Warp God Mode: ขึ้นด้านบนก่อนค่อยลง
+-- Warp ขึ้นก่อนลง ตรวจสอบพื้น
 local function godWarp(target)
     local hrp = getHRP()
-    if not hrp or not target.instance or not target.instance.Parent then return false end
-    local targetPos = target.position
+    if not hrp or not target.instance or not target.instance.Parent then return end
 
-    -- ตรวจพื้นด้วย raycast
-    local rayOrigin = targetPos + Vector3.new(0,5,0)
-    local rayDirection = Vector3.new(0,-20,0)
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterDescendantsInstances = {player.Character}
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    local rayRes = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-    if rayRes then
-        targetPos = Vector3.new(targetPos.X, rayRes.Position.Y + 3, targetPos.Z)
-        -- warp ขึ้นสูงก่อน
-        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0,15,0))
-        task.wait(0.03) -- ให้เกมโหลด
-        -- warp ลงเก็บ
-        hrp.CFrame = CFrame.new(targetPos)
-        return true
-    else
-        return false
+    local pos = target.position
+    hrp.CFrame = CFrame.new(pos + Vector3.new(0,25,0)) -- ขึ้นก่อน
+
+    local groundPos = nil
+    local tries = 0
+
+    while tries < 20 do
+        local ray = workspace:Raycast(pos + Vector3.new(0,10,0), Vector3.new(0,-50,0))
+        if ray then
+            groundPos = ray.Position
+            break
+        end
+        tries += 1
+        task.wait(0.03)
     end
+
+    if not groundPos then return end
+    hrp.CFrame = CFrame.new(groundPos + Vector3.new(0,3,0)) -- ลงเก็บ
 end
 
--- ฟังชันตรวจตายแล้ว respawn
+-- ตรวจและ respawn
 local function ensureCharacter()
     local char = player.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -108,66 +126,24 @@ local function ensureCharacter()
     end
 end
 
--- LOOP FARM
+-- LOOP ฟาร์ม
 local function farmLoop()
     while running do
         ensureCharacter()
-        local hrp = getHRP()
-        if not hrp then
-            task.wait(1)
-            continue
-        end
+        local foods = getFoods()
 
-        local foods = getSafeFoods(20)
-        if #foods == 0 then
-            task.wait(0.2)
-            continue
-        end
-
-        for _, target in ipairs(foods) do
+        for _, f in ipairs(foods) do
             if not running then break end
             ensureCharacter()
-            godWarp(target)
+            godWarp(f)
         end
+
         task.wait(0.01)
     end
 end
 
 -- GUI
-local gui = Instance.new("ScreenGui")
-gui.Name = "FoodCollector"
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
 
-local start = Instance.new("TextButton", gui)
-start.Size = UDim2.new(0,100,0,40)
-start.Position = UDim2.new(0,20,0,20)
-start.Text = "START"
-
-local stop = Instance.new("TextButton", gui)
-stop.Size = UDim2.new(0,100,0,40)
-stop.Position = UDim2.new(0,20,0,70)
-stop.Text = "STOP"
-
-local statusLbl = Instance.new("TextLabel", gui)
-statusLbl.Size = UDim2.new(0,200,0,30)
-statusLbl.Position = UDim2.new(0,140,0,25)
-statusLbl.Text = "Status: Idle"
-statusLbl.TextColor3 = Color3.new(1,1,1)
-statusLbl.BackgroundTransparency = 1
-
-local function setStatus(t)
-    statusLbl.Text = "Status: "..t
-end
-
-start.MouseButton1Click:Connect(function()
-    if running then return end
-    running = true
-    setStatus("Running")
-    task.spawn(farmLoop)
-end)
-
-stop.MouseButton1Click:Connect(function()
-    running = false
-    setStatus("Stopped")
-end)
+local start = Instance.new("TextButton", gui
