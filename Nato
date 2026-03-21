@@ -6,104 +6,66 @@ local TweenService      = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local running = false
-local tweenSpeed = 100 -- ค่าเริ่มต้น
-local avoidRadius = 15 -- ระยะห่างที่จะหลบผู้เล่นอื่น
+local tweenSpeed = 100 
+local avoidRadius = 15
 local currentTween = nil
 
--- ── ฟังก์ชันหา RootPart ──
 local function getHRP()
     local char = player.Character
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+    return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 end
 
--- ── ฟังก์ชันคำนวณตำแหน่งเป้าหมายแบบหลบผู้เล่น ──
 local function getSafePosition(targetPos)
-    local hrp = getHRP()
-    if not hrp then return targetPos end
-    
     for _, other in ipairs(Players:GetPlayers()) do
         if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
             local otherPos = other.Character.HumanoidRootPart.Position
-            local dist = (targetPos - otherPos).Magnitude
-            if dist < avoidRadius then
-                -- ถ้าเป้าหมายใกล้คนอื่นเกินไป ให้ขยับตำแหน่งเบี่ยงออกมาเล็กน้อย
-                local offset = (targetPos - otherPos).Unit * avoidRadius
-                return otherPos + offset
+            if (targetPos - otherPos).Magnitude < avoidRadius then
+                return otherPos + (targetPos - otherPos).Unit * avoidRadius
             end
         end
     end
     return targetPos
 end
 
--- ── ฟังก์ชันหาอาหารที่ใกล้ที่สุด ──
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
     local best, bestDist = nil, math.huge
     for _, food in ipairs(CollectionService:GetTagged("Food")) do
-        if not food or not food.Parent then continue end
-        local pos = (food:IsA("Model") and food:GetPivot().Position) or (food:IsA("BasePart") and food.Position)
-        if pos then
-            local d = (hrp.Position - pos).Magnitude
-            if d < bestDist then
-                bestDist = d
-                best = { instance = food, position = pos }
+        if food and food.Parent then
+            local pos = (food:IsA("Model") and food:GetPivot().Position) or (food:IsA("BasePart") and food.Position)
+            if pos then
+                local d = (hrp.Position - pos).Magnitude
+                if d < bestDist then
+                    bestDist = d
+                    best = { instance = food, position = pos }
+                end
             end
         end
     end
     return best
 end
 
--- ── ฟังก์ชัน Tween ──
-local function tweenTo(targetPos)
-    local hrp = getHRP()
-    if not hrp then return end
-    
-    local safePos = getSafePosition(targetPos)
-    local distance = (hrp.Position - safePos).Magnitude
-    local duration = distance / tweenSpeed
-    
-    local info = TweenInfo.new(duration, Enum.EasingStyle.Linear)
-    currentTween = TweenService:Create(hrp, info, {CFrame = CFrame.new(safePos)})
-    currentTween:Play()
-    currentTween.Completed:Wait()
-end
-
--- ── GUI Setup ──────────────────────────────────────────────────────────
+-- ── GUI ──
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "AdvancedCollector"
+gui.Name = "BeDinoFixed"
 gui.ResetOnSpawn = false
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0, 280, 0, 250)
-panel.Position = UDim2.new(0.5, -140, 0.5, -125)
-panel.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+panel.Size = UDim2.new(0, 280, 0, 220)
+panel.Position = UDim2.new(0.5, -140, 0.5, -110)
+panel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 panel.Active = true
 panel.Draggable = true
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12)
+Instance.new("UICorner", panel)
 
 local title = Instance.new("TextLabel", panel)
 title.Size = UDim2.new(1, 0, 0, 40)
-title.Text = "🦖 BE DINO - TWEEN AUTO"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-title.Font = Enum.Font.GothamBold
+title.Text = "🦖 BE DINO V2 (TWEEN)"
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
 Instance.new("UICorner", title)
 
--- ปุ่มเปิด/ปิด (Toggle Visibility)
-local toggleBtn = Instance.new("TextButton", gui)
-toggleBtn.Size = UDim2.new(0, 50, 0, 50)
-toggleBtn.Position = UDim2.new(0, 10, 0.5, -25)
-toggleBtn.Text = "O/C"
-toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-toggleBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
-toggleBtn.MouseButton1Click:Connect(function()
-    panel.Visible = not panel.Visible
-end)
-
--- Slider ปรับความเร็ว
 local speedLbl = Instance.new("TextLabel", panel)
 speedLbl.Size = UDim2.new(1, 0, 0, 30)
 speedLbl.Position = UDim2.new(0, 0, 0, 50)
@@ -111,72 +73,87 @@ speedLbl.Text = "Speed: " .. tweenSpeed
 speedLbl.TextColor3 = Color3.new(1,1,1)
 speedLbl.BackgroundTransparency = 1
 
-local slider = Instance.new("TextButton", panel)
-slider.Size = UDim2.new(0.8, 0, 0, 10)
-slider.Position = UDim2.new(0.1, 0, 0, 85)
-slider.BackgroundColor3 = Color3.new(0.3, 0.3, 0.3)
-slider.Text = ""
+-- ── แก้ไข Slider ให้ลื่นขึ้น ──
+local sliderFrame = Instance.new("Frame", panel)
+sliderFrame.Size = UDim2.new(0.8, 0, 0, 10)
+sliderFrame.Position = UDim2.new(0.1, 0, 0, 85)
+sliderFrame.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
 
-local bar = Instance.new("Frame", slider)
-bar.Size = UDim2.new(tweenSpeed/500, 0, 1, 0)
-bar.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+local sliderFill = Instance.new("Frame", sliderFrame)
+sliderFill.Size = UDim2.new(tweenSpeed/500, 0, 1, 0)
+sliderFill.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
 
-slider.MouseButton1Down:Connect(function()
-    local moveConn
-    moveConn = UserInputService.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            local relativeX = math.clamp((input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X, 0, 1)
-            tweenSpeed = math.floor(relativeX * 500) + 20
-            bar.Size = UDim2.new(relativeX, 0, 1, 0)
-            speedLbl.Text = "Speed: " .. tweenSpeed
-        end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            moveConn:Disconnect()
-        end
-    end)
+local sliderBtn = Instance.new("TextButton", sliderFrame)
+sliderBtn.Size = UDim2.new(1, 0, 1, 0)
+sliderBtn.BackgroundTransparency = 1
+sliderBtn.Text = ""
+
+local dragging = false
+local function updateSlider()
+    local mousePos = UserInputService:GetMouseLocation().X
+    local relativeX = math.clamp((mousePos - sliderFrame.AbsolutePosition.X) / sliderFrame.AbsoluteSize.X, 0, 1)
+    tweenSpeed = math.floor(relativeX * 480) + 20
+    sliderFill.Size = UDim2.new(relativeX, 0, 1, 0)
+    speedLbl.Text = "Speed: " .. tweenSpeed
+end
+
+sliderBtn.MouseButton1Down:Connect(function() dragging = true end)
+UserInputService.InputEnded:Connect(function(input) 
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end 
 end)
+RunService.RenderStepped:Connect(function() if dragging then updateSlider() end end)
 
--- ปุ่ม Start / Stop
+-- ── ปุ่ม Start/Stop ──
 local startBtn = Instance.new("TextButton", panel)
-startBtn.Size = UDim2.new(0.8, 0, 0, 40)
-startBtn.Position = UDim2.new(0.1, 0, 0, 120)
+startBtn.Size = UDim2.new(0.8, 0, 0, 45)
+startBtn.Position = UDim2.new(0.1, 0, 0, 110)
 startBtn.Text = "START"
-startBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+startBtn.Font = Enum.Font.GothamBold
 startBtn.TextColor3 = Color3.new(1,1,1)
+startBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
 Instance.new("UICorner", startBtn)
 
 startBtn.MouseButton1Click:Connect(function()
     running = not running
     startBtn.Text = running and "STOP" or "START"
-    startBtn.BackgroundColor3 = running and Color3.fromRGB(150, 50, 50) or Color3.fromRGB(50, 150, 50)
+    startBtn.BackgroundColor3 = running and Color3.fromRGB(180, 40, 40) or Color3.fromRGB(40, 180, 40)
     
-    if running then
-        task.spawn(function()
-            while running do
-                local food = getClosestFood()
-                if food then
-                    tweenTo(food.position)
-                end
-                task.wait(0.1)
-            end
-            if currentTween then currentTween:Cancel() end
-        end)
-    else
-        if currentTween then currentTween:Cancel() end
+    if not running and currentTween then
+        currentTween:Cancel()
     end
 end)
 
--- ปุ่มปิดสคริปต์
-local closeBtn = Instance.new("TextButton", panel)
-closeBtn.Size = UDim2.new(0.8, 0, 0, 30)
-closeBtn.Position = UDim2.new(0.1, 0, 0, 180)
-closeBtn.Text = "Destroy Script"
-closeBtn.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
-closeBtn.TextColor3 = Color3.new(1,1,1)
-closeBtn.MouseButton1Click:Connect(function()
-    running = false
-    if currentTween then currentTween:Cancel() end
-    gui:Destroy()
+-- ── Main Loop ──
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if running then
+            local hrp = getHRP()
+            local food = getClosestFood()
+            
+            if hrp and food then
+                local safePos = getSafePosition(food.position)
+                local dist = (hrp.Position - safePos).Magnitude
+                
+                if dist > 3 then
+                    local info = TweenInfo.new(dist/tweenSpeed, Enum.EasingStyle.Linear)
+                    currentTween = TweenService:Create(hrp, info, {CFrame = CFrame.new(safePos)})
+                    currentTween:Play()
+                    currentTween.Completed:Wait()
+                end
+            end
+        end
+    end
+end)
+
+-- ปุ่ม Hide/Show
+local toggle = Instance.new("TextButton", gui)
+toggle.Size = UDim2.new(0, 40, 0, 40)
+toggle.Position = UDim2.new(0, 5, 0.4, 0)
+toggle.Text = "OFF"
+toggle.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+toggle.TextColor3 = Color3.new(1,1,1)
+toggle.MouseButton1Click:Connect(function()
+    panel.Visible = not panel.Visible
+    toggle.Text = panel.Visible and "OFF" or "ON"
 end)
