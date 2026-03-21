@@ -27,23 +27,20 @@ local function getHRP()
     return char.PrimaryPart
 end
 
--- 🔥 ตรวจผู้เล่นใกล้
-local function isPlayerNear(pos, radius)
+-- 🔥 หลบผู้เล่น 100 studs
+local function isPlayerNear(pos)
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
             local root = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character.PrimaryPart
-            if root then
-                local dist = (root.Position - pos).Magnitude
-                if dist < radius then
-                    return true
-                end
+            if root and (root.Position - pos).Magnitude < 100 then
+                return true
             end
         end
     end
     return false
 end
 
--- 🔥 หาอาหารหลายจุด + หลบคน
+-- 🔥 หาอาหาร (เยอะขึ้น + คัดโซนโล่ง)
 local function getManyFoods(limit)
     local hrp = getHRP()
     if not hrp then return {} end
@@ -57,7 +54,8 @@ local function getManyFoods(limit)
                 elseif food:IsA("BasePart") then return food.Position end
             end)
 
-            if ok and pos and not isPlayerNear(pos, 25) then
+            -- 🔥 ต้อง “ไม่มีคนเลย”
+            if ok and pos and not isPlayerNear(pos) then
                 table.insert(foods, {instance = food, position = pos})
             end
         end
@@ -75,15 +73,16 @@ local function getManyFoods(limit)
     return result
 end
 
--- 🔥 วาร์ปรัวหลายครั้ง
-local function multiWarp(targetPos)
+-- 🔥 วาร์ปเร็ว + ลื่น (ไม่กระตุก)
+local function ultraWarp(targetPos)
     local hrp = getHRP()
     if not hrp then return end
 
-    for i = 1, 8 do
-        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0,5,0))
-    end
+    -- step 1 (สูงหน่อยให้ detect)
+    hrp.CFrame = CFrame.new(targetPos + Vector3.new(0,7,0))
+    task.wait() -- 1 frame
 
+    -- step 2 (ลงเก็บ)
     hrp.CFrame = CFrame.new(targetPos + Vector3.new(0,2,0))
 end
 
@@ -116,6 +115,7 @@ toggleBtn.MouseButton1Click:Connect(function()
     panel.Visible = visible
 end)
 
+-- Status
 local statusLbl = Instance.new("TextLabel", panel)
 statusLbl.Position = UDim2.new(0,10,0,40)
 statusLbl.Size = UDim2.new(1,-20,0,20)
@@ -123,7 +123,7 @@ statusLbl.BackgroundTransparency = 1
 statusLbl.Text = "Status: Idle"
 statusLbl.TextColor3 = Color3.new(1,1,1)
 
--- ปุ่ม
+-- Buttons
 local function makeBtn(text, color, x)
     local b = Instance.new("TextButton", panel)
     b.Size = UDim2.new(0,110,0,35)
@@ -141,22 +141,22 @@ local function setStatus(t)
     statusLbl.Text = "Status: "..t
 end
 
--- 🔥 LOOP
+-- 🔥 LOOP เร็วมาก
 local function loop()
     while running do
-        local foods = getManyFoods(8)
+        local foods = getManyFoods(15) -- 🔥 จาก 8 → 15 (โคตรเร็ว)
 
         if #foods > 0 then
-            setStatus("Farming...")
+            setStatus("Ultra Farming...")
             for _, food in ipairs(foods) do
-                multiWarp(food.position)
+                ultraWarp(food.position)
             end
         else
             setStatus("No safe food")
             task.wait(0.2)
         end
 
-        task.wait(0.05)
+        task.wait() -- 🔥 ลื่นสุด
     end
 
     setStatus("Stopped")
