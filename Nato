@@ -72,7 +72,7 @@ local function getSafeFoods(limit)
     return result
 end
 
--- Warp ทันทีไปเป้าหมาย (God Warp) ปลอดภัย
+-- Warp God Mode: ขึ้นด้านบนก่อนค่อยลง
 local function godWarp(target)
     local hrp = getHRP()
     if not hrp or not target.instance or not target.instance.Parent then return false end
@@ -87,19 +87,33 @@ local function godWarp(target)
     local rayRes = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
     if rayRes then
         targetPos = Vector3.new(targetPos.X, rayRes.Position.Y + 3, targetPos.Z)
+        -- warp ขึ้นสูงก่อน
+        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0,15,0))
+        task.wait(0.03) -- ให้เกมโหลด
+        -- warp ลงเก็บ
         hrp.CFrame = CFrame.new(targetPos)
         return true
     else
-        return false -- ไม่มีพื้น, skip
+        return false
+    end
+end
+
+-- ฟังชันตรวจตายแล้ว respawn
+local function ensureCharacter()
+    local char = player.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then
+        player.CharacterAdded:Wait()
+        task.wait(0.5)
     end
 end
 
 -- LOOP FARM
 local function farmLoop()
     while running do
+        ensureCharacter()
         local hrp = getHRP()
         if not hrp then
-            player.CharacterAdded:Wait()
             task.wait(1)
             continue
         end
@@ -112,6 +126,7 @@ local function farmLoop()
 
         for _, target in ipairs(foods) do
             if not running then break end
+            ensureCharacter()
             godWarp(target)
         end
         task.wait(0.01)
