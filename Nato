@@ -17,6 +17,7 @@ end)
 local running   = false
 local tweenSpeed = 100
 local moverConn  = nil
+local currentTarget = nil
 
 -- Root
 local function getHRP()
@@ -30,7 +31,7 @@ local function getHRP()
     return char.PrimaryPart
 end
 
--- ❗ ของเดิม 100%
+-- ❗ ใช้ของเดิม 100%
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -56,31 +57,28 @@ end
 
 local function stopMover()
     if moverConn then moverConn:Disconnect(); moverConn = nil end
+    currentTarget = nil
 end
 
--- 🔥 วาร์ปไม่ตกแมพ
+-- 🔥 วาร์ปต่อเนื่อง (ไม่ค้าง)
 local function moveTo(targetPos)
-    local reached = false
-    stopMover()
+    currentTarget = targetPos
+
+    if moverConn then moverConn:Disconnect() end
 
     moverConn = RunService.Heartbeat:Connect(function()
         local hrp = getHRP()
-        if not hrp or not running then reached = true; stopMover(); return end
+        if not hrp or not running or not currentTarget then return end
 
-        local dist = (hrp.Position - targetPos).Magnitude
-        if dist < 5 then reached = true; stopMover(); return end
+        local dist = (hrp.Position - currentTarget).Magnitude
 
-        -- วาร์ปลอยเหนือเป้าหมาย
-        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 5, 0))
+        if dist < 5 then
+            currentTarget = nil
+            return
+        end
+
+        hrp.CFrame = CFrame.new(currentTarget + Vector3.new(0,5,0))
     end)
-
-    while not reached do task.wait(0.05) end
-
-    -- ลงพื้นแบบปลอดภัย
-    local hrp = getHRP()
-    if hrp then
-        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 2, 0))
-    end
 end
 
 -- GUI
@@ -89,7 +87,7 @@ gui.Name = "FoodCollector"
 gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
--- Toggle GUI
+-- Toggle
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0,120,0,40)
 toggleBtn.Position = UDim2.new(0,20,0,20)
@@ -97,7 +95,6 @@ toggleBtn.Text = "Toggle GUI"
 toggleBtn.BackgroundColor3 = Color3.fromRGB(40,40,60)
 toggleBtn.TextColor3 = Color3.new(1,1,1)
 toggleBtn.Parent = gui
-Instance.new("UICorner", toggleBtn)
 
 local panel = Instance.new("Frame")
 panel.Size = UDim2.new(0,270,0,215)
@@ -106,7 +103,6 @@ panel.BackgroundColor3 = Color3.fromRGB(18,18,28)
 panel.Active = true
 panel.Draggable = true
 panel.Parent = gui
-Instance.new("UICorner", panel)
 
 local visible = true
 toggleBtn.MouseButton1Click:Connect(function()
@@ -132,11 +128,9 @@ speedLbl.Text = "Speed: 100"
 local track = Instance.new("Frame", panel)
 track.Position = UDim2.new(0,10,0,100)
 track.Size = UDim2.new(1,-20,0,8)
-track.BackgroundColor3 = Color3.fromRGB(50,50,75)
 
 local fill = Instance.new("Frame", track)
 fill.Size = UDim2.new(tweenSpeed/1000,0,1,0)
-fill.BackgroundColor3 = Color3.fromRGB(90,160,255)
 
 local knob = Instance.new("Frame", track)
 knob.Size = UDim2.new(0,18,0,18)
@@ -195,14 +189,21 @@ end
 local function loop()
     while running do
         local food = getClosestFood()
+
         if food then
             setStatus("Going "..food.instance.Name)
             moveTo(food.position)
+
+            repeat
+                task.wait(0.1)
+            until not running or not currentTarget
+
         else
             setStatus("No food")
             task.wait(0.3)
         end
     end
+
     setStatus("Stopped")
 end
 
