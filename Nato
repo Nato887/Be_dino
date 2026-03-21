@@ -126,13 +126,11 @@ end)
 
 -- ── ระบบ Teleport Step ต่อเนื่อง ──
 task.spawn(function()
+    local hrp = player.Character or player.CharacterAdded:Wait()
+    hrp = hrp:WaitForChild("HumanoidRootPart", 5)
     while true do
         RunService.RenderStepped:Wait()
-        if running then
-            local hrp = getHRP()
-            if not hrp then continue end
-
-            -- หาเป้าหมายถ้าไม่มีหรือหายไป
+        if running and hrp then
             if not targetFood or not targetFood.instance or not targetFood.instance.Parent then
                 targetFood = getClosestFood()
             end
@@ -143,15 +141,15 @@ task.spawn(function()
                 local dist = direction.Magnitude
 
                 if dist > 0.5 then
-                    local stepDistance = math.min(speed * 0.05, dist)
-                    local moveVector = direction.Unit * stepDistance
+                    local stepDistance = math.max(speed * 0.05, 0.5)
+                    local moveVector = direction.Unit * math.min(stepDistance, dist)
 
-                    -- ตรวจสอบผู้เล่นอื่น
+                    -- ตรวจสอบผู้เล่นคนอื่น
                     for _, other in ipairs(Players:GetPlayers()) do
                         if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
                             local otherPos = other.Character.HumanoidRootPart.Position
                             if (hrp.Position + moveVector - otherPos).Magnitude < 3 then
-                                moveVector = Vector3.new(0, 0, 0) -- หยุดถ้าชน
+                                moveVector = Vector3.new(0, 0, 0)
                                 break
                             end
                         end
