@@ -14,18 +14,19 @@ end)
 
 local running = false
 
--- Auto reconnect character (กันตายแล้วสคริปหยุด)
+-- Auto reconnect character
 player.CharacterAdded:Connect(function()
     task.wait(1)
 end)
 
+-- Root part
 local function getHRP()
     local char = player.Character
     if not char then return nil end
     return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- 🔥 ตรวจผู้เล่นอันตราย
+-- ตรวจผู้เล่นอันตรายใกล้
 local function isDangerousNear(pos, radius)
     radius = radius or 150
     local myChar = player.Character
@@ -48,11 +49,10 @@ local function isDangerousNear(pos, radius)
     return false
 end
 
--- 🔥 หาอาหารปลอดภัย
+-- หาอาหารปลอดภัย
 local function getSafeFoods(limit)
     local hrp = getHRP()
     if not hrp then return {} end
-
     local foods = {}
     for _, food in ipairs(CollectionService:GetTagged("Food")) do
         if food and food.Parent then
@@ -62,17 +62,14 @@ local function getSafeFoods(limit)
             elseif food:IsA("BasePart") then
                 pos = food.Position
             end
-
             if pos and not isDangerousNear(pos) then
                 table.insert(foods, pos)
             end
         end
     end
-
     table.sort(foods, function(a,b)
         return (a - hrp.Position).Magnitude < (b - hrp.Position).Magnitude
     end)
-
     local result = {}
     for i=1, math.min(limit, #foods) do
         table.insert(result, foods[i])
@@ -80,59 +77,50 @@ local function getSafeFoods(limit)
     return result
 end
 
--- ⚡ Warp เร็ว + ปลอดภัย (ปรับใหม่)
+-- Warp step
 local function stepWarp(targetPos)
     local hrp = getHRP()
     if not hrp then return false end
-
     local startPos = hrp.Position
     local dist = (targetPos - startPos).Magnitude
-
-    local steps = math.clamp(math.floor(dist / 6), 2, 25) -- 🔥 step ใหญ่ขึ้น = เร็วขึ้น
-
+    local steps = math.clamp(math.floor(dist / 6), 2, 25)
     for i = 1, steps do
         if not running then return false end
-
         local nextPos = startPos:Lerp(targetPos, i/steps)
-
-        -- 🔥 เช็คทุก step
         if isDangerousNear(nextPos) then
             return false
         end
-
         hrp.CFrame = CFrame.new(nextPos + Vector3.new(0,3,0))
-        task.wait(0.015) -- 🔥 เร็วขึ้นแต่ยังปลอดภัย
+        task.wait(0.015)
     end
-
     return true
 end
 
--- LOOP
+-- LOOP FARM
 local function farmLoop()
     while running do
-        if not player.Character then
+        local hrp = getHRP()
+        if not hrp then
             player.CharacterAdded:Wait()
             task.wait(1)
+            continue
         end
 
         local foods = getSafeFoods(12)
 
-        if #foods > 0 then
+        if #foods == 0 then
+            task.wait(0.1)
+        else
             for _, pos in ipairs(foods) do
                 if not running then break end
-
                 local success = stepWarp(pos)
-
                 if not success then
-                    task.wait(0.1) -- 🔥 เปลี่ยนเป้าหมายทันที
-                    break
+                    task.wait(0.05)
                 end
             end
-        else
-            task.wait(0.15)
         end
 
-        task.wait(0.02)
+        task.wait(0.01)
     end
 end
 
