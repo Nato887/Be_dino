@@ -1,11 +1,9 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local RunService        = game:GetService("RunService")
-local UserInputService  = game:GetService("UserInputService")
 local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
-if not player.Character then player.CharacterAdded:Wait() end
 
 -- Anti AFK
 player.Idled:Connect(function()
@@ -16,22 +14,30 @@ end)
 
 local running = false
 
--- Root
+-- Auto reconnect character (กันตายแล้วสคริปหยุด)
+player.CharacterAdded:Connect(function()
+    task.wait(1)
+end)
+
 local function getHRP()
     local char = player.Character
     if not char then return nil end
     return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- ตรวจสอบผู้เล่นพลังสูงรอบตัวทุกเฟรม
+-- 🔥 ตรวจผู้เล่นอันตราย
 local function isDangerousNear(pos, radius)
     radius = radius or 150
+    local myChar = player.Character
+    if not myChar then return true end
+    local myHum = myChar:FindFirstChildOfClass("Humanoid")
+    if not myHum then return true end
+
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
             local root = plr.Character:FindFirstChild("HumanoidRootPart")
             local hum  = plr.Character:FindFirstChildOfClass("Humanoid")
-            local myHum = player.Character:FindFirstChildOfClass("Humanoid")
-            if root and hum and myHum then
+            if root and hum then
                 local dist = (root.Position - pos).Magnitude
                 if dist < radius and hum.Health > myHum.Health then
                     return true
@@ -42,7 +48,7 @@ local function isDangerousNear(pos, radius)
     return false
 end
 
--- หาอาหารหลายจุดเฉพาะพื้นที่ปลอดภัย
+-- 🔥 หาอาหารปลอดภัย
 local function getSafeFoods(limit)
     local hrp = getHRP()
     if not hrp then return {} end
@@ -51,17 +57,20 @@ local function getSafeFoods(limit)
     for _, food in ipairs(CollectionService:GetTagged("Food")) do
         if food and food.Parent then
             local pos
-            if food:IsA("Model") then pos = food:GetPivot().Position
-            elseif food:IsA("BasePart") then pos = food.Position end
+            if food:IsA("Model") then
+                pos = food:GetPivot().Position
+            elseif food:IsA("BasePart") then
+                pos = food.Position
+            end
 
             if pos and not isDangerousNear(pos) then
-                table.insert(foods, {instance=food, position=pos})
+                table.insert(foods, pos)
             end
         end
     end
 
     table.sort(foods, function(a,b)
-        return (a.position - hrp.Position).Magnitude < (b.position - hrp.Position).Magnitude
+        return (a - hrp.Position).Magnitude < (b - hrp.Position).Magnitude
     end)
 
     local result = {}
@@ -71,28 +80,67 @@ local function getSafeFoods(limit)
     return result
 end
 
--- Warp แบบ chunked / step
+-- ⚡ Warp เร็ว + ปลอดภัย (ปรับใหม่)
 local function stepWarp(targetPos)
     local hrp = getHRP()
-    if not hrp then return end
+    if not hrp then return false end
+
     local startPos = hrp.Position
     local dist = (targetPos - startPos).Magnitude
-    local steps = math.max(1, math.floor(dist/3)) -- แบ่งเป็น step เล็กๆ
-    for i=1, steps do
-        if not running then break end
+
+    local steps = math.clamp(math.floor(dist / 6), 2, 25) -- 🔥 step ใหญ่ขึ้น = เร็วขึ้น
+
+    for i = 1, steps do
+        if not running then return false end
+
         local nextPos = startPos:Lerp(targetPos, i/steps)
+
+        -- 🔥 เช็คทุก step
         if isDangerousNear(nextPos) then
-            task.wait(0.1) -- เจอผู้เล่นพลังสูง → รอ
             return false
         end
-        hrp.CFrame = CFrame.new(nextPos + Vector3.new(0,2,0))
-        task.wait(0.03) -- ให้เกมโหลด
+
+        hrp.CFrame = CFrame.new(nextPos + Vector3.new(0,3,0))
+        task.wait(0.015) -- 🔥 เร็วขึ้นแต่ยังปลอดภัย
     end
+
     return true
 end
 
+-- LOOP
+local function farmLoop()
+    while running do
+        if not player.Character then
+            player.CharacterAdded:Wait()
+            task.wait(1)
+        end
+
+        local foods = getSafeFoods(12)
+
+        if #foods > 0 then
+            for _, pos in ipairs(foods) do
+                if not running then break end
+
+                local success = stepWarp(pos)
+
+                if not success then
+                    task.wait(0.1) -- 🔥 เปลี่ยนเป้าหมายทันที
+                    break
+                end
+            end
+        else
+            task.wait(0.15)
+        end
+
+        task.wait(0.02)
+    end
+end
+
 -- GUI
-local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+local gui = Instance.new("ScreenGui")
+gui.Name = "FoodCollector"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
 
 local start = Instance.new("TextButton", gui)
 start.Size = UDim2.new(0,100,0,40)
@@ -103,40 +151,6 @@ local stop = Instance.new("TextButton", gui)
 stop.Size = UDim2.new(0,100,0,40)
 stop.Position = UDim2.new(0,20,0,70)
 stop.Text = "STOP"
-
-local statusLbl = Instance.new("TextLabel", gui)
-statusLbl.Position = UDim2.new(0,20,0,120)
-statusLbl.Size = UDim2.new(0,300,0,30)
-statusLbl.Text = "Status: Idle"
-statusLbl.TextColor3 = Color3.new(1,1,1)
-statusLbl.BackgroundTransparency = 1
-
-local function setStatus(txt)
-    statusLbl.Text = "Status: "..txt
-end
-
--- LOOP หลัก
-local function farmLoop()
-    while running do
-        local foods = getSafeFoods(10)
-        if #foods > 0 then
-            setStatus("Farming "..#foods.." foods")
-            for _, f in ipairs(foods) do
-                if not running then break end
-                local success = stepWarp(f.position)
-                if not success then
-                    task.wait(0.2) -- เจอผู้เล่นพลังสูง → รอแล้วหาอาหารใหม่
-                    break
-                end
-            end
-        else
-            setStatus("No safe food")
-            task.wait(0.2)
-        end
-        task.wait(0.05)
-    end
-    setStatus("Stopped")
-end
 
 start.MouseButton1Click:Connect(function()
     if running then return end
