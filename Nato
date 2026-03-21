@@ -1,12 +1,11 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
-local UserInputService  = game:GetService("UserInputService")
 local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
--- ✅ Anti AFK
+-- Anti AFK
 player.Idled:Connect(function()
     VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
     task.wait(1)
@@ -14,98 +13,28 @@ player.Idled:Connect(function()
 end)
 
 local running = false
-local busy = false
 
--- Root
 local function getHRP()
     local char = player.Character
     if not char then return nil end
-    for _, v in ipairs(char:GetChildren()) do
-        if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
-            return v
-        end
-    end
-    return char.PrimaryPart
+    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- 🛡️ กันตกแมพ
-local function safeCFrame(pos)
-    return CFrame.new(pos + Vector3.new(0, 6, 0))
-end
-
--- 🔥 เช็คผู้เล่นใกล้ (กันตาย)
+-- 🔥 หลบผู้เล่น 150 (อัปแล้ว)
 local function isPlayerNear(pos)
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
-            local root = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character.PrimaryPart
-            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-
-            if root and hum and hum.Health > 0 then
-                if (root.Position - pos).Magnitude < 140 then
-                    return true
-                end
-            end
-        end
-    end
-    return false
-end
-
--- 🔥 ตรวจว่าตาย
-local function isDead()
-    local char = player.Character
-    if not char then return true end
-
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return true end
-
-    return hum.Health <= 0
-end
-
--- 🔥 รอเกิดใหม่
-local function waitForRespawn()
-    setStatus("💀 Died...")
-
-    repeat task.wait() until player.Character
-    local hum = player.Character:WaitForChild("Humanoid")
-
-    repeat task.wait() until hum.Health > 0
-
-    setStatus("⏳ Respawned")
-    task.wait(2)
-end
-
--- 🔥 ตรวจ GUI ไข่
-local function isOpeningEggs()
-    local gui = player:FindFirstChild("PlayerGui")
-    if not gui then return false end
-
-    for _, v in ipairs(gui:GetDescendants()) do
-        if v:IsA("TextLabel") or v:IsA("Frame") then
-            local name = string.lower(v.Name)
-
-            if (string.find(name, "egg") or string.find(name, "hatch")) and v.Visible then
+            local root = plr.Character:FindFirstChild("HumanoidRootPart")
+            if root and (root.Position - pos).Magnitude < 150 then
                 return true
             end
         end
     end
-
     return false
 end
 
--- 🔥 รอไข่เปิดหมด
-local function waitUntilEggDone()
-    setStatus("🥚 Opening eggs...")
-
-    local timeout = tick() + 40
-    while isOpeningEggs() and tick() < timeout do
-        task.wait(0.5)
-    end
-
-    setStatus("✅ Eggs done")
-end
-
--- 🔥 หาอาหาร
-local function getManyFoods(limit)
+-- หาอาหาร
+local function getFoods()
     local hrp = getHRP()
     if not hrp then return {} end
 
@@ -113,143 +42,67 @@ local function getManyFoods(limit)
 
     for _, food in CollectionService:GetTagged("Food") do
         if food and food.Parent then
-            local ok, pos = pcall(function()
-                if food:IsA("Model") then return food:GetPivot().Position
-                elseif food:IsA("BasePart") then return food.Position end
-            end)
+            local pos
+            if food:IsA("Model") then
+                pos = food:GetPivot().Position
+            elseif food:IsA("BasePart") then
+                pos = food.Position
+            end
 
-            if ok and pos and not isPlayerNear(pos) then
-                table.insert(foods, {instance = food, position = pos})
+            if pos and not isPlayerNear(pos) then
+                table.insert(foods, pos)
             end
         end
     end
 
-    table.sort(foods, function(a,b)
-        return (a.position - hrp.Position).Magnitude < (b.position - hrp.Position).Magnitude
-    end)
-
-    local result = {}
-    for i = 1, math.min(limit, #foods) do
-        table.insert(result, foods[i])
-    end
-
-    return result
+    return foods
 end
 
--- ⚡ วาร์ป
-local function ultraWarp(pos)
+-- ⚡ GOD MAX WARP (อัปแล้ว)
+local function warp(pos)
     local hrp = getHRP()
     if not hrp then return end
 
-    hrp.CFrame = safeCFrame(pos)
+    -- วาร์ปสูงก่อน (กันบัค/กันตก)
+    hrp.CFrame = CFrame.new(pos + Vector3.new(0,6,0))
+
+    -- snap ลงเก็บทันที
     hrp.CFrame = CFrame.new(pos + Vector3.new(0,2,0))
 end
 
--- GUI
-local gui = Instance.new("ScreenGui")
-gui.Name = "FoodCollector"
-gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
-
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0,120,0,40)
-toggleBtn.Position = UDim2.new(0,20,0,20)
-toggleBtn.Text = "Toggle GUI"
-toggleBtn.Parent = gui
-
-local panel = Instance.new("Frame")
-panel.Size = UDim2.new(0,270,0,215)
-panel.Position = UDim2.new(0.5,-135,0.5,-107)
-panel.BackgroundColor3 = Color3.fromRGB(18,18,28)
-panel.Active = true
-panel.Draggable = true
-panel.Parent = gui
-
-local visible = true
-toggleBtn.MouseButton1Click:Connect(function()
-    visible = not visible
-    panel.Visible = visible
-end)
-
-local statusLbl = Instance.new("TextLabel", panel)
-statusLbl.Position = UDim2.new(0,10,0,40)
-statusLbl.Size = UDim2.new(1,-20,0,20)
-statusLbl.BackgroundTransparency = 1
-statusLbl.Text = "Status: Idle"
-statusLbl.TextColor3 = Color3.new(1,1,1)
-
-local function setStatus(t)
-    statusLbl.Text = "Status: "..t
-end
-
-local function makeBtn(text, color, x)
-    local b = Instance.new("TextButton", panel)
-    b.Size = UDim2.new(0,110,0,35)
-    b.Position = UDim2.new(0,x,0,150)
-    b.Text = text
-    b.BackgroundColor3 = color
-    b.TextColor3 = Color3.new(1,1,1)
-    return b
-end
-
-local startBtn = makeBtn("START", Color3.fromRGB(40,165,70), 10)
-local stopBtn  = makeBtn("STOP",  Color3.fromRGB(180,60,60), 140)
-
--- 🔥 LOOP FINAL
+-- Loop
 local function loop()
     while running do
+        local foods = getFoods()
 
-        -- 💀 ตาย
-        if isDead() then
-            running = false
-            busy = false
-
-            waitForRespawn()
-            waitUntilEggDone()
-
-            running = true
-            setStatus("Resumed")
-        end
-
-        if busy then
-            task.wait()
-            continue
-        end
-
-        busy = true
-
-        local foods = getManyFoods(30)
-
-        if #foods > 0 then
-            setStatus("⚡ GOD SAFE FARM")
-
-            for _, food in ipairs(foods) do
-                if not isPlayerNear(food.position) then
-                    ultraWarp(food.position)
-                end
+        for _, pos in ipairs(foods) do
+            if not isPlayerNear(pos) then -- 🔥 เช็คซ้ำกันพลาด
+                warp(pos)
             end
-        else
-            setStatus("Searching...")
-            task.wait(0.15)
         end
 
-        busy = false
         task.wait()
     end
-
-    setStatus("Stopped")
 end
 
-startBtn.MouseButton1Click:Connect(function()
-    if running then return end
+-- GUI
+local gui = Instance.new("ScreenGui", player.PlayerGui)
+
+local start = Instance.new("TextButton", gui)
+start.Size = UDim2.new(0,100,0,40)
+start.Position = UDim2.new(0,20,0,20)
+start.Text = "START"
+
+local stop = Instance.new("TextButton", gui)
+stop.Size = UDim2.new(0,100,0,40)
+stop.Position = UDim2.new(0,20,0,70)
+stop.Text = "STOP"
+
+start.MouseButton1Click:Connect(function()
     running = true
-    setStatus("Running")
     task.spawn(loop)
 end)
 
-stopBtn.MouseButton1Click:Connect(function()
+stop.MouseButton1Click:Connect(function()
     running = false
-    setStatus("Stopped")
 end)
-
-setStatus("Idle")
