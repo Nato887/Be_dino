@@ -1,30 +1,16 @@
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
-local UserInputService  = game:GetService("UserInputService")
-local TweenService      = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local running = false
-local tweenSpeed = 100 
-local avoidRadius = 15
+local tweenSpeed = 100
 local currentTween = nil
 
 local function getHRP()
-    local char = player.Character
-    return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
-end
-
-local function getSafePosition(targetPos)
-    for _, other in ipairs(Players:GetPlayers()) do
-        if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
-            local otherPos = other.Character.HumanoidRootPart.Position
-            if (targetPos - otherPos).Magnitude < avoidRadius then
-                return otherPos + (targetPos - otherPos).Unit * avoidRadius
-            end
-        end
-    end
-    return targetPos
+    return player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 end
 
 local function getClosestFood()
@@ -46,98 +32,106 @@ local function getClosestFood()
     return best
 end
 
--- ── GUI ──
+-- ── GUI สำหรับมือถือ ──
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "BeDinoFixed"
+gui.Name = "BeDinoMobile"
 gui.ResetOnSpawn = false
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0, 280, 0, 220)
-panel.Position = UDim2.new(0.5, -140, 0.5, -110)
-panel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+panel.Size = UDim2.new(0, 220, 0, 180)
+panel.Position = UDim2.new(0.5, -110, 0.2, 0)
+panel.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 panel.Active = true
-panel.Draggable = true
+panel.Draggable = true -- สำหรับนิ้วลากบนมือถือ
 Instance.new("UICorner", panel)
 
 local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1, 0, 0, 40)
-title.Text = "🦖 BE DINO V2 (TWEEN)"
+title.Size = UDim2.new(1, 0, 0, 35)
+title.Text = "🦖 BE DINO MOBILE"
 title.TextColor3 = Color3.new(1,1,1)
-title.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+title.BackgroundColor3 = Color3.fromRGB(55, 55, 85)
 Instance.new("UICorner", title)
 
 local speedLbl = Instance.new("TextLabel", panel)
-speedLbl.Size = UDim2.new(1, 0, 0, 30)
-speedLbl.Position = UDim2.new(0, 0, 0, 50)
+speedLbl.Size = UDim2.new(1, 0, 0, 25)
+speedLbl.Position = UDim2.new(0, 0, 0, 40)
 speedLbl.Text = "Speed: " .. tweenSpeed
 speedLbl.TextColor3 = Color3.new(1,1,1)
 speedLbl.BackgroundTransparency = 1
 
--- ── แก้ไข Slider ให้ลื่นขึ้น ──
-local sliderFrame = Instance.new("Frame", panel)
-sliderFrame.Size = UDim2.new(0.8, 0, 0, 10)
-sliderFrame.Position = UDim2.new(0.1, 0, 0, 85)
-sliderFrame.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+-- ── Slider สำหรับมือถือ (รองรับ Touch) ──
+local sliderBg = Instance.new("Frame", panel)
+sliderBg.Size = UDim2.new(0.8, 0, 0, 15)
+sliderBg.Position = UDim2.new(0.1, 0, 0, 70)
+sliderBg.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 
-local sliderFill = Instance.new("Frame", sliderFrame)
+local sliderFill = Instance.new("Frame", sliderBg)
 sliderFill.Size = UDim2.new(tweenSpeed/500, 0, 1, 0)
-sliderFill.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+sliderFill.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
 
-local sliderBtn = Instance.new("TextButton", sliderFrame)
+local sliderBtn = Instance.new("TextButton", sliderBg)
 sliderBtn.Size = UDim2.new(1, 0, 1, 0)
 sliderBtn.BackgroundTransparency = 1
 sliderBtn.Text = ""
 
-local dragging = false
-local function updateSlider()
-    local mousePos = UserInputService:GetMouseLocation().X
-    local relativeX = math.clamp((mousePos - sliderFrame.AbsolutePosition.X) / sliderFrame.AbsoluteSize.X, 0, 1)
-    tweenSpeed = math.floor(relativeX * 480) + 20
-    sliderFill.Size = UDim2.new(relativeX, 0, 1, 0)
+-- แก้ไข Slider ให้ทำงานบนมือถือ
+local function updateSlider(input)
+    local inputPos = input.Position.X
+    local relX = math.clamp((inputPos - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
+    tweenSpeed = math.max(10, math.floor(relX * 500))
+    sliderFill.Size = UDim2.new(relX, 0, 1, 0)
     speedLbl.Text = "Speed: " .. tweenSpeed
 end
 
-sliderBtn.MouseButton1Down:Connect(function() dragging = true end)
-UserInputService.InputEnded:Connect(function(input) 
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end 
+sliderBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        local connection
+        connection = RunService.RenderStepped:Connect(function()
+            local currentInput = UserInputService:GetMouseLocation() -- ใช้พิกัดเมาส์/ทัช
+            updateSlider({Position = currentInput})
+        end)
+        
+        local endRef
+        endRef = UserInputService.InputEnded:Connect(function(inputEnd)
+            if inputEnd.UserInputType == Enum.UserInputType.Touch or inputEnd.UserInputType == Enum.UserInputType.MouseButton1 then
+                connection:Disconnect()
+                endRef:Disconnect()
+            end
+        end)
+    end
 end)
-RunService.RenderStepped:Connect(function() if dragging then updateSlider() end end)
 
 -- ── ปุ่ม Start/Stop ──
 local startBtn = Instance.new("TextButton", panel)
-startBtn.Size = UDim2.new(0.8, 0, 0, 45)
-startBtn.Position = UDim2.new(0.1, 0, 0, 110)
+startBtn.Size = UDim2.new(0.8, 0, 0, 40)
+startBtn.Position = UDim2.new(0.1, 0, 0, 100)
 startBtn.Text = "START"
-startBtn.Font = Enum.Font.GothamBold
 startBtn.TextColor3 = Color3.new(1,1,1)
-startBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
+startBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 50)
 Instance.new("UICorner", startBtn)
 
 startBtn.MouseButton1Click:Connect(function()
     running = not running
     startBtn.Text = running and "STOP" or "START"
-    startBtn.BackgroundColor3 = running and Color3.fromRGB(180, 40, 40) or Color3.fromRGB(40, 180, 40)
-    
-    if not running and currentTween then
-        currentTween:Cancel()
-    end
+    startBtn.BackgroundColor3 = running and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(0, 180, 50)
 end)
 
--- ── Main Loop ──
+-- ── ระบบเดิน (Tween + Lock Y) ──
 task.spawn(function()
     while true do
-        task.wait(0.1)
+        task.wait(0.2)
         if running then
             local hrp = getHRP()
             local food = getClosestFood()
             
             if hrp and food then
-                local safePos = getSafePosition(food.position)
-                local dist = (hrp.Position - safePos).Magnitude
+                -- กันตกแมพ: ใช้ค่า Y เดิมของตัวละคร
+                local targetPos = Vector3.new(food.position.X, hrp.Position.Y, food.position.Z)
+                local dist = (hrp.Position - targetPos).Magnitude
                 
                 if dist > 3 then
-                    local info = TweenInfo.new(dist/tweenSpeed, Enum.EasingStyle.Linear)
-                    currentTween = TweenService:Create(hrp, info, {CFrame = CFrame.new(safePos)})
+                    local info = TweenInfo.new(dist / tweenSpeed, Enum.EasingStyle.Linear)
+                    currentTween = TweenService:Create(hrp, info, {CFrame = CFrame.new(targetPos, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))})
                     currentTween:Play()
                     currentTween.Completed:Wait()
                 end
@@ -146,14 +140,15 @@ task.spawn(function()
     end
 end)
 
--- ปุ่ม Hide/Show
+-- ปุ่มปิด/เปิดเมนู (สำคัญมากสำหรับมือถือเพราะจอก็เล็ก)
 local toggle = Instance.new("TextButton", gui)
-toggle.Size = UDim2.new(0, 40, 0, 40)
-toggle.Position = UDim2.new(0, 5, 0.4, 0)
-toggle.Text = "OFF"
-toggle.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+toggle.Size = UDim2.new(0, 45, 0, 45)
+toggle.Position = UDim2.new(0.02, 0, 0.4, 0)
+toggle.Text = "MENU"
+toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 toggle.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", toggle).CornerRadius = UDim.new(1, 0)
+
 toggle.MouseButton1Click:Connect(function()
     panel.Visible = not panel.Visible
-    toggle.Text = panel.Visible and "OFF" or "ON"
 end)
