@@ -8,7 +8,9 @@ local player = Players.LocalPlayer
 local running = false
 local tweenSpeed = 100
 local currentTween = nil
+local targetFood = nil
 
+-- ── ฟังก์ชันพื้นฐาน ──
 local function getHRP()
     return player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 end
@@ -32,7 +34,7 @@ local function getClosestFood()
     return best
 end
 
--- ── GUI สำหรับมือถือ ──
+-- ── GUI มือถือ ──
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 gui.Name = "BeDinoMobile"
 gui.ResetOnSpawn = false
@@ -42,7 +44,7 @@ panel.Size = UDim2.new(0, 220, 0, 180)
 panel.Position = UDim2.new(0.5, -110, 0.2, 0)
 panel.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 panel.Active = true
-panel.Draggable = true -- สำหรับนิ้วลากบนมือถือ
+panel.Draggable = true
 Instance.new("UICorner", panel)
 
 local title = Instance.new("TextLabel", panel)
@@ -59,22 +61,19 @@ speedLbl.Text = "Speed: " .. tweenSpeed
 speedLbl.TextColor3 = Color3.new(1,1,1)
 speedLbl.BackgroundTransparency = 1
 
--- ── Slider สำหรับมือถือ (รองรับ Touch) ──
+-- ── Slider มือถือ ──
 local sliderBg = Instance.new("Frame", panel)
 sliderBg.Size = UDim2.new(0.8, 0, 0, 15)
 sliderBg.Position = UDim2.new(0.1, 0, 0, 70)
 sliderBg.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-
 local sliderFill = Instance.new("Frame", sliderBg)
 sliderFill.Size = UDim2.new(tweenSpeed/500, 0, 1, 0)
 sliderFill.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
-
 local sliderBtn = Instance.new("TextButton", sliderBg)
 sliderBtn.Size = UDim2.new(1, 0, 1, 0)
 sliderBtn.BackgroundTransparency = 1
 sliderBtn.Text = ""
 
--- แก้ไข Slider ให้ทำงานบนมือถือ
 local function updateSlider(input)
     local inputPos = input.Position.X
     local relX = math.clamp((inputPos - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
@@ -87,7 +86,7 @@ sliderBtn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         local connection
         connection = RunService.RenderStepped:Connect(function()
-            local currentInput = UserInputService:GetMouseLocation() -- ใช้พิกัดเมาส์/ทัช
+            local currentInput = UserInputService:GetMouseLocation()
             updateSlider({Position = currentInput})
         end)
         
@@ -116,31 +115,7 @@ startBtn.MouseButton1Click:Connect(function()
     startBtn.BackgroundColor3 = running and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(0, 180, 50)
 end)
 
--- ── ระบบเดิน (Tween + Lock Y) ──
-task.spawn(function()
-    while true do
-        task.wait(0.2)
-        if running then
-            local hrp = getHRP()
-            local food = getClosestFood()
-            
-            if hrp and food then
-                -- กันตกแมพ: ใช้ค่า Y เดิมของตัวละคร
-                local targetPos = Vector3.new(food.position.X, hrp.Position.Y, food.position.Z)
-                local dist = (hrp.Position - targetPos).Magnitude
-                
-                if dist > 3 then
-                    local info = TweenInfo.new(dist / tweenSpeed, Enum.EasingStyle.Linear)
-                    currentTween = TweenService:Create(hrp, info, {CFrame = CFrame.new(targetPos, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))})
-                    currentTween:Play()
-                    currentTween.Completed:Wait()
-                end
-            end
-        end
-    end
-end)
-
--- ปุ่มปิด/เปิดเมนู (สำคัญมากสำหรับมือถือเพราะจอก็เล็ก)
+-- ── ปุ่มเปิด/ปิดเมนู ──
 local toggle = Instance.new("TextButton", gui)
 toggle.Size = UDim2.new(0, 45, 0, 45)
 toggle.Position = UDim2.new(0.02, 0, 0.4, 0)
@@ -151,4 +126,41 @@ Instance.new("UICorner", toggle).CornerRadius = UDim.new(1, 0)
 
 toggle.MouseButton1Click:Connect(function()
     panel.Visible = not panel.Visible
+end)
+
+-- ── ระบบเดิน Tween ──
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        if running then
+            local hrp = getHRP()
+            if not hrp then continue end
+
+            -- หาเป้าหมายถ้าไม่มีหรือหายไป
+            if not targetFood or not targetFood.instance or not targetFood.instance.Parent then
+                targetFood = getClosestFood()
+            end
+
+            if targetFood then
+                local targetPos = Vector3.new(targetFood.position.X, hrp.Position.Y, targetFood.position.Z)
+                local dist = (hrp.Position - targetPos).Magnitude
+
+                if dist > 3 then
+                    if currentTween then currentTween:Cancel() end
+                    local info = TweenInfo.new(dist / tweenSpeed, Enum.EasingStyle.Linear)
+                    currentTween = TweenService:Create(hrp, info, {CFrame = CFrame.new(targetPos)})
+                    currentTween:Play()
+                    currentTween.Completed:Wait()
+                else
+                    targetFood = nil
+                end
+            end
+        else
+            if currentTween then
+                currentTween:Cancel()
+                currentTween = nil
+            end
+            targetFood = nil
+        end
+    end
 end)
