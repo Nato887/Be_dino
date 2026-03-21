@@ -2,16 +2,23 @@ local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService  = game:GetService("UserInputService")
-local TweenService      = game:GetService("TweenService")
+local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
-local running = false
-local tweenSpeed = 100 -- studs per second
-local moverConn = nil
+-- ✅ Anti AFK
+player.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
 
--- ── Get the REAL root (non-massless, direct child of character) ──
+local running   = false
+local tweenSpeed = 100
+local moverConn  = nil
+
+-- ── Get Root ──
 local function getHRP()
     local char = player.Character
     if not char then return nil end
@@ -23,22 +30,6 @@ local function getHRP()
     return char.PrimaryPart
 end
 
--- ── Avoid other players within 50 studs ──
-local function adjustForPlayers(targetPos)
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character and plr.Character.PrimaryPart then
-            local dist = (plr.Character.PrimaryPart.Position - targetPos).Magnitude
-            if dist < 50 then
-                -- move target 50 studs away in opposite direction
-                local direction = (targetPos - plr.Character.PrimaryPart.Position).Unit
-                targetPos = plr.Character.PrimaryPart.Position + direction * 50
-            end
-        end
-    end
-    return targetPos
-end
-
--- ── Get closest food ──
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -60,63 +51,144 @@ local function getClosestFood()
     return best
 end
 
--- ── Move with Tween ──
-local function moveTo(targetPos)
-    local hrp = getHRP()
-    if not hrp then return end
-
-    targetPos = adjustForPlayers(targetPos)
-
-    local distance = (hrp.Position - targetPos).Magnitude
-    local time = distance / tweenSpeed
-    local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(targetPos)})
-    tween:Play()
-    tween.Completed:Wait()
+local function stopMover()
+    if moverConn then moverConn:Disconnect(); moverConn = nil end
 end
 
--- ── GUI Toggle ──
-local guiEnabled = true
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
-    if input.KeyCode == Enum.KeyCode.F then -- กด F เพื่อ toggle
-        guiEnabled = not guiEnabled
-        if gui then gui.Enabled = guiEnabled end
+local function moveTo(targetPos)
+    local reached = false
+    stopMover()
+    moverConn = RunService.Heartbeat:Connect(function(dt)
+        local hrp = getHRP()
+        if not hrp or not running then reached = true; stopMover(); return end
+        local diff = targetPos - hrp.Position
+        local dist = diff.Magnitude
+        if dist < 2 then reached = true; stopMover(); return end
+        local step = math.min(tweenSpeed * dt, dist)
+        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
+    end)
+    while not reached do task.wait(0.05) end
+end
+
+-- ── GUI ──
+local gui = Instance.new("ScreenGui")
+gui.Name = "FoodCollector"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+-- Toggle Button
+local toggleBtn = Instance.new("TextButton", gui)
+toggleBtn.Size = UDim2.new(0, 120, 0, 40)
+toggleBtn.Position = UDim2.new(0, 20, 0, 20)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40,40,60)
+toggleBtn.Text = "Toggle GUI"
+toggleBtn.TextColor3 = Color3.new(1,1,1)
+
+local panel = Instance.new("Frame", gui)
+panel.Size = UDim2.new(0, 270, 0, 215)
+panel.Position = UDim2.new(0.5, -135, 0.5, -107)
+panel.BackgroundColor3 = Color3.fromRGB(18,18,28)
+panel.Active = true
+panel.Draggable = true
+
+local guiVisible = true
+toggleBtn.MouseButton1Click:Connect(function()
+    guiVisible = not guiVisible
+    panel.Visible = guiVisible
+end)
+
+local title = Instance.new("TextLabel", panel)
+title.Size = UDim2.new(1,0,0,30)
+title.Text = "🦖 Food Collector"
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.new(1,1,1)
+
+local statusLbl = Instance.new("TextLabel", panel)
+statusLbl.Position = UDim2.new(0,10,0,40)
+statusLbl.Size = UDim2.new(1,-20,0,20)
+statusLbl.BackgroundTransparency = 1
+statusLbl.Text = "Status: Idle"
+
+local speedLbl = Instance.new("TextLabel", panel)
+speedLbl.Position = UDim2.new(0,10,0,70)
+speedLbl.Size = UDim2.new(1,-20,0,20)
+speedLbl.BackgroundTransparency = 1
+speedLbl.Text = "Speed: 100"
+
+-- Slider
+local track = Instance.new("Frame", panel)
+track.Size = UDim2.new(1,-20,0,8)
+track.Position = UDim2.new(0,10,0,100)
+
+local fill = Instance.new("Frame", track)
+fill.Size = UDim2.new(tweenSpeed/1000,0,1,0)
+
+local knob = Instance.new("TextButton", track)
+knob.Size = UDim2.new(0,20,0,20)
+knob.Position = UDim2.new(tweenSpeed/1000,-10,0.5,-10)
+
+local dragging = false
+
+knob.MouseButton1Down:Connect(function() dragging = true end)
+knob.TouchStarted:Connect(function() dragging = true end)
+
+UserInputService.InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1
+    or i.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
     end
 end)
 
--- ── Main collect loop ──
-local function collectLoop()
+UserInputService.InputChanged:Connect(function(i)
+    if not dragging then return end
+    if i.UserInputType ~= Enum.UserInputType.MouseMovement
+    and i.UserInputType ~= Enum.UserInputType.Touch then return end
+
+    local ratio = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X,0,1)
+    tweenSpeed = math.floor(ratio * 1000)
+    fill.Size = UDim2.new(ratio,0,1,0)
+    knob.Position = UDim2.new(ratio,-10,0.5,-10)
+    speedLbl.Text = "Speed: "..tweenSpeed
+end)
+
+-- Buttons
+local startBtn = Instance.new("TextButton", panel)
+startBtn.Position = UDim2.new(0,10,0,140)
+startBtn.Size = UDim2.new(0,120,0,40)
+startBtn.Text = "Start"
+
+local stopBtn = Instance.new("TextButton", panel)
+stopBtn.Position = UDim2.new(0,140,0,140)
+stopBtn.Size = UDim2.new(0,120,0,40)
+stopBtn.Text = "Stop"
+
+local function setStatus(t)
+    statusLbl.Text = "Status: "..t
+end
+
+local function loop()
     while running do
-        if not player.Character then
-            player.CharacterAdded:Wait()
-            task.wait(1)
-            continue
-        end
-
-        local hrp = getHRP()
-        if not hrp then
-            task.wait(1)
-            continue
-        end
-
         local food = getClosestFood()
-        if not food or not food.instance or not food.instance.Parent then
+        if food then
+            setStatus("Going "..food.instance.Name)
+            moveTo(food.position)
+        else
+            setStatus("No food")
             task.wait(0.3)
-            continue
         end
-
-        moveTo(food.position)
     end
 end
 
--- ── Start/Stop ──
-local function startCollector()
+startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
-    task.spawn(collectLoop)
-end
+    task.spawn(loop)
+end)
 
-local function stopCollector()
+stopBtn.MouseButton1Click:Connect(function()
     running = false
-end
+    stopMover()
+    setStatus("Stopped")
+end)
+
+setStatus("Idle")
