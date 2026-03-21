@@ -44,7 +44,7 @@ local function isDangerousNear(pos, radius)
     return false
 end
 
--- หาอาหารปลอดภัย
+-- หาอาหารปลอดภัย ปรับทุกเฟรม
 local function getSafeFoods(limit)
     local hrp = getHRP()
     if not hrp then return {} end
@@ -57,13 +57,14 @@ local function getSafeFoods(limit)
             elseif food:IsA("BasePart") then
                 pos = food.Position
             end
-            if pos and not isDangerousNear(pos) then
-                table.insert(foods, pos)
+            -- มีอาหารจริง + ปลอดภัย
+            if pos and food.Parent and not isDangerousNear(pos) then
+                table.insert(foods, {instance = food, position = pos})
             end
         end
     end
     table.sort(foods, function(a,b)
-        return (a - hrp.Position).Magnitude < (b - hrp.Position).Magnitude
+        return (a.position - hrp.Position).Magnitude < (b.position - hrp.Position).Magnitude
     end)
     local result = {}
     for i=1, math.min(limit, #foods) do
@@ -73,26 +74,28 @@ local function getSafeFoods(limit)
 end
 
 -- Step warp adaptive speed
-local function adaptiveWarp(targetPos)
+local function adaptiveWarp(target)
     local hrp = getHRP()
-    if not hrp then return false end
+    if not hrp or not target.instance or not target.instance.Parent then return false end
     local startPos = hrp.Position
+    local targetPos = target.position
     local dist = (targetPos - startPos).Magnitude
     local steps = math.clamp(math.floor(dist / 4), 4, 25)
 
     for i = 1, steps do
         if not running then return false end
-        local nextPos = startPos:Lerp(targetPos, i/steps)
+        -- ตรวจว่าจุดยังมีเป้าหมายอยู่
+        if not target.instance or not target.instance.Parent then
+            return false
+        end
 
-        -- Safety check รอบตัว
+        local nextPos = startPos:Lerp(targetPos, i/steps)
         if isDangerousNear(nextPos, 150) then
             return false -- ข้ามจุดนี้
         end
 
-        -- Adaptive speed: โซนปลอดภัย warp เร็วขึ้น
-        local speedFactor = 0.015
         hrp.CFrame = CFrame.new(nextPos + Vector3.new(0,3,0))
-        task.wait(speedFactor)
+        task.wait(0.015)
     end
     return true
 end
@@ -107,11 +110,11 @@ local function farmLoop()
             continue
         end
 
-        local foods = getSafeFoods(15) -- multi-target
+        local foods = getSafeFoods(15)
 
-        for _, pos in ipairs(foods) do
+        for _, target in ipairs(foods) do
             if not running then break end
-            adaptiveWarp(pos)
+            adaptiveWarp(target)
         end
 
         task.wait(0.01)
