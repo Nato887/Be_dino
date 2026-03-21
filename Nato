@@ -21,7 +21,7 @@ local function getHRP()
     return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- ตรวจผู้เล่นพลังสูงใกล้
+-- ตรวจผู้เล่นพลังสูงรอบตัว
 local function isDangerousNear(pos, radius)
     radius = radius or 150
     local myChar = player.Character
@@ -44,7 +44,7 @@ local function isDangerousNear(pos, radius)
     return false
 end
 
--- หาอาหารปลอดภัย ปรับทุกเฟรม
+-- หาอาหารปลอดภัย
 local function getSafeFoods(limit)
     local hrp = getHRP()
     if not hrp then return {} end
@@ -57,8 +57,7 @@ local function getSafeFoods(limit)
             elseif food:IsA("BasePart") then
                 pos = food.Position
             end
-            -- มีอาหารจริง + ปลอดภัย
-            if pos and food.Parent and not isDangerousNear(pos) then
+            if pos and food.Parent and not isDangerousNear(pos,150) then
                 table.insert(foods, {instance = food, position = pos})
             end
         end
@@ -73,29 +72,37 @@ local function getSafeFoods(limit)
     return result
 end
 
--- Step warp adaptive speed
-local function adaptiveWarp(target)
+-- Ultra step warp
+local function ultraWarp(target)
     local hrp = getHRP()
     if not hrp or not target.instance or not target.instance.Parent then return false end
     local startPos = hrp.Position
     local targetPos = target.position
     local dist = (targetPos - startPos).Magnitude
-    local steps = math.clamp(math.floor(dist / 4), 4, 25)
+    local steps = math.clamp(math.floor(dist / 2), 5, 30) -- smaller step = smoother + faster
 
     for i = 1, steps do
         if not running then return false end
-        -- ตรวจว่าจุดยังมีเป้าหมายอยู่
-        if not target.instance or not target.instance.Parent then
+        if not target.instance or not target.instance.Parent then return false end
+
+        local nextPos = startPos:Lerp(targetPos, i/steps)
+
+        -- ตรวจผู้เล่นรอบตัว
+        if isDangerousNear(nextPos, 150) then
             return false
         end
 
-        local nextPos = startPos:Lerp(targetPos, i/steps)
-        if isDangerousNear(nextPos, 150) then
-            return false -- ข้ามจุดนี้
+        -- ตรวจพื้น
+        local ray = Ray.new(nextPos + Vector3.new(0,10,0), Vector3.new(0,-50,0))
+        local part, hitPos = workspace:FindPartOnRay(ray, player.Character)
+        if hitPos then
+            nextPos = Vector3.new(nextPos.X, hitPos.Y + 3, nextPos.Z)
+        else
+            nextPos = Vector3.new(nextPos.X, nextPos.Y + 3, nextPos.Z)
         end
 
-        hrp.CFrame = CFrame.new(nextPos + Vector3.new(0,3,0))
-        task.wait(0.015)
+        hrp.CFrame = CFrame.new(nextPos)
+        task.wait(0.01) -- ลื่นสุด
     end
     return true
 end
@@ -110,13 +117,11 @@ local function farmLoop()
             continue
         end
 
-        local foods = getSafeFoods(15)
-
+        local foods = getSafeFoods(20) -- เก็บหลายจุด
         for _, target in ipairs(foods) do
             if not running then break end
-            adaptiveWarp(target)
+            ultraWarp(target)
         end
-
         task.wait(0.01)
     end
 end
