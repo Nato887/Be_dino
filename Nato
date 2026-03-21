@@ -6,8 +6,7 @@ local RunService        = game:GetService("RunService")
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
--- ⚙️ ระยะวงเก็บ / ระยะหลบผู้เล่น
-local COLLECT_RADIUS = 100 -- 🌟 วงรอบเก็บอาหาร 100 studs
+-- ระยะหลบผู้เล่น
 local SAFE_RADIUS = 150
 
 -- Anti AFK
@@ -26,7 +25,7 @@ local function getHRP()
     return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- ตรวจผู้เล่นรอบตัว
+-- ตรวจผู้เล่นพลังสูงรอบตัว
 local function isDangerousNear(pos, radius)
     radius = radius or SAFE_RADIUS
     local myChar = player.Character
@@ -48,7 +47,7 @@ local function isDangerousNear(pos, radius)
     return false
 end
 
--- หาอาหารในระยะ COLLECT_RADIUS
+-- หาอาหารทุกอันที่มีอยู่ ไม่จำกัดระยะ
 local function getFoods()
     local hrp = getHRP()
     if not hrp then return {} end
@@ -62,7 +61,7 @@ local function getFoods()
             elseif food:IsA("BasePart") then
                 pos = food.Position
             end
-            if pos and (pos - hrp.Position).Magnitude <= COLLECT_RADIUS and not isDangerousNear(pos, SAFE_RADIUS) then
+            if pos and not isDangerousNear(pos, SAFE_RADIUS) then
                 table.insert(foods, {instance = food, position = pos})
             end
         end
