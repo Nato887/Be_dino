@@ -72,14 +72,14 @@ local function getSafeFoods(limit)
     return result
 end
 
--- Ultra step warp
-local function ultraWarp(target)
+-- Safe multi-step warp
+local function safeWarp(target)
     local hrp = getHRP()
     if not hrp or not target.instance or not target.instance.Parent then return false end
     local startPos = hrp.Position
     local targetPos = target.position
     local dist = (targetPos - startPos).Magnitude
-    local steps = math.clamp(math.floor(dist / 2), 5, 30) -- smaller step = smoother + faster
+    local steps = math.clamp(math.floor(dist / 2), 5, 30)
 
     for i = 1, steps do
         if not running then return false end
@@ -87,22 +87,25 @@ local function ultraWarp(target)
 
         local nextPos = startPos:Lerp(targetPos, i/steps)
 
-        -- ตรวจผู้เล่นรอบตัว
         if isDangerousNear(nextPos, 150) then
             return false
         end
 
-        -- ตรวจพื้น
-        local ray = Ray.new(nextPos + Vector3.new(0,10,0), Vector3.new(0,-50,0))
-        local part, hitPos = workspace:FindPartOnRay(ray, player.Character)
-        if hitPos then
-            nextPos = Vector3.new(nextPos.X, hitPos.Y + 3, nextPos.Z)
+        -- ตรวจพื้นด้วย Raycast
+        local rayOrigin = nextPos + Vector3.new(0,10,0)
+        local rayDirection = Vector3.new(0,-50,0)
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterDescendantsInstances = {player.Character}
+        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+        local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+        if raycastResult then
+            nextPos = Vector3.new(nextPos.X, raycastResult.Position.Y + 3, nextPos.Z)
         else
-            nextPos = Vector3.new(nextPos.X, nextPos.Y + 3, nextPos.Z)
+            nextPos = Vector3.new(nextPos.X, nextPos.Y, nextPos.Z)
         end
 
         hrp.CFrame = CFrame.new(nextPos)
-        task.wait(0.01) -- ลื่นสุด
+        task.wait(0.01)
     end
     return true
 end
@@ -117,10 +120,10 @@ local function farmLoop()
             continue
         end
 
-        local foods = getSafeFoods(20) -- เก็บหลายจุด
+        local foods = getSafeFoods(20)
         for _, target in ipairs(foods) do
             if not running then break end
-            ultraWarp(target)
+            safeWarp(target)
         end
         task.wait(0.01)
     end
@@ -142,12 +145,25 @@ stop.Size = UDim2.new(0,100,0,40)
 stop.Position = UDim2.new(0,20,0,70)
 stop.Text = "STOP"
 
+local statusLbl = Instance.new("TextLabel", gui)
+statusLbl.Size = UDim2.new(0,200,0,30)
+statusLbl.Position = UDim2.new(0,140,0,25)
+statusLbl.Text = "Status: Idle"
+statusLbl.TextColor3 = Color3.new(1,1,1)
+statusLbl.BackgroundTransparency = 1
+
+local function setStatus(t)
+    statusLbl.Text = "Status: "..t
+end
+
 start.MouseButton1Click:Connect(function()
     if running then return end
     running = true
+    setStatus("Running")
     task.spawn(farmLoop)
 end)
 
 stop.MouseButton1Click:Connect(function()
     running = false
+    setStatus("Stopped")
 end)
