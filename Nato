@@ -1,213 +1,200 @@
-local p=game:GetService("Players").LocalPlayer
-local r=game:GetService("RunService")
-local c=game:GetService("CollectionService")
-local u=game:GetService("UserInputService")
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
+local UserInputService  = game:GetService("UserInputService")
 
-if not p.Character then p.CharacterAdded:Wait() end
+local player = Players.LocalPlayer
+if not player.Character then player.CharacterAdded:Wait() end
 
--- loading
-local g=Instance.new("ScreenGui",p:WaitForChild("PlayerGui"))
-g.ResetOnSpawn=false
+local running      = false
+local avoidPlayers = true -- ระบบหลบผู้เล่น
+local tweenSpeed   = 100
+local moverConn    = nil
 
-local lf=Instance.new("Frame",g)
-lf.Size=UDim2.new(1,0,1,0)
-lf.BackgroundColor3=Color3.fromRGB(10,10,20)
-
-local lt=Instance.new("TextLabel",lf)
-lt.Size=UDim2.new(1,0,0,50)
-lt.Position=UDim2.new(0,0,.5,-25)
-lt.BackgroundTransparency=1
-lt.Text="Loading..."
-lt.TextColor3=Color3.new(1,1,1)
-lt.TextScaled=true
-lt.Font=Enum.Font.GothamBold
-
-task.spawn(function()
-    while lf.Parent do
-        lt.Text="Loading."
-        task.wait(.3)
-        lt.Text="Loading.."
-        task.wait(.3)
-        lt.Text="Loading..."
-        task.wait(.3)
-    end
-end)
-
-task.wait(2.5)
-lf:Destroy()
-
--- core
-local a,s,m=false,120,3000
-local k
-local R=60
-
-local function h()
-    local x=p.Character
-    return x and (x:FindFirstChild("RootPart") or x.PrimaryPart)
+-- ── ฟังก์ชันหา RootPart ──
+local function getHRP()
+    local char = player.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
-local function e()
-    local x=h() if not x then return {} end
-    local t={}
-    for _,v in ipairs(game:GetService("Players"):GetPlayers()) do
-        if v~=p and v.Character then
-            local y=v.Character:FindFirstChild("HumanoidRootPart") or v.Character.PrimaryPart
-            if y then
-                local d=(x.Position-y.Position).Magnitude
-                if d<R then
-                    table.insert(t,{p=y.Position,d=d})
-                end
+-- ── ฟังก์ชันคำนวณการหลบผู้เล่น ──
+local function getAvoidanceForce()
+    local hrp = getHRP()
+    if not hrp or not avoidPlayers then return Vector3.new() end
+    
+    local force = Vector3.new()
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+            local otherHrp = other.Character.HumanoidRootPart
+            local diff = hrp.Position - otherHrp.Position
+            local dist = diff.Magnitude
+            if dist < 15 then -- ระยะที่จะเริ่มหลบ (15 studs)
+                force = force + (diff.Unit * (15 - dist))
             end
         end
     end
-    return t
+    return force
 end
 
-local function d(pos,es)
-    local n=0
-    for _,v in ipairs(es) do
-        local z=(pos-v.p).Magnitude
-        n+=(R-math.clamp(z,0,R))
-    end
-    return n
-end
-
-local function f(es)
-    local x=h() if not x then return end
-    local b,v=nil,math.huge
-    for _,o in ipairs(c:GetTagged("Food")) do
-        local ok,pos=pcall(function()
-            return o:IsA("Model") and o:GetPivot().Position or o.Position
+local function getClosestFood()
+    local hrp = getHRP()
+    if not hrp then return nil end
+    local best, bestDist = nil, math.huge
+    for _, food in ipairs(CollectionService:GetTagged("Food")) do
+        if not food or not food.Parent then continue end
+        local ok, pos = pcall(function()
+            if food:IsA("Model") then return food:GetPivot().Position
+            elseif food:IsA("BasePart") then return food.Position end
         end)
         if ok and pos then
-            local dist=(x.Position-pos).Magnitude
-            local sc=dist + d(pos,es)*3
-            if sc<v then v,b=sc,{o,pos} end
-        end
-    end
-    return b
-end
-
-local function S() if k then k:Disconnect() k=nil end end
-
-local function M(pos)
-    local done=false S()
-    k=r.Heartbeat:Connect(function(dt)
-        local x=h()
-        if not x or not a then done=true return S() end
-        local diff=pos-x.Position local mag=diff.Magnitude
-        if mag<2 then done=true return S() end
-        x.CFrame=CFrame.new(x.Position+diff.Unit*math.min(s*dt,mag))
-    end)
-    repeat task.wait() until done
-end
-
-local function F(es)
-    local x=h() if not x then return end
-    local v=Vector3.new()
-    for _,i in ipairs(es) do
-        local away=(x.Position-i.p)
-        v+=away.Unit*(1/(i.d+1))
-    end
-    if v.Magnitude==0 then return end
-    M(x.Position+v.Unit*R)
-end
-
--- GUI
-local fr=Instance.new("Frame",g)
-fr.Size=UDim2.new(0,270,0,215)
-fr.Position=UDim2.new(.5,-135,.5,-107)
-fr.BackgroundColor3=Color3.fromRGB(18,18,28)
-fr.Active,fr.Draggable=true,true
-Instance.new("UICorner",fr).CornerRadius=UDim.new(0,10)
-
-local function L(t,y)
-    local l=Instance.new("TextLabel",fr)
-    l.Size=UDim2.new(1,-20,0,20)
-    l.Position=UDim2.new(0,10,0,y)
-    l.BackgroundTransparency=1
-    l.Text=t
-    l.TextColor3=Color3.fromRGB(150,150,180)
-    l.Font=Enum.Font.Gotham
-    l.TextSize=13
-    l.TextXAlignment=0
-    return l
-end
-
-local st=L("Status: Idle",46)
-local sp=L("Speed: 120",94)
-
-local tr=Instance.new("Frame",fr)
-tr.Size=UDim2.new(1,-20,0,8)
-tr.Position=UDim2.new(0,10,0,122)
-tr.BackgroundColor3=Color3.fromRGB(50,50,75)
-
-local fi=Instance.new("Frame",tr)
-fi.Size=UDim2.new(s/m,0,1,0)
-fi.BackgroundColor3=Color3.fromRGB(90,160,255)
-
-local kb=Instance.new("TextButton",tr)
-kb.Size=UDim2.new(0,20,0,20)
-kb.Position=UDim2.new(s/m,-10,.5,-10)
-kb.Text=""
-
-local g1=false
-kb.MouseButton1Down:Connect(function() g1=true end)
-u.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then g1=false end end)
-
-u.InputChanged:Connect(function(i)
-    if g1 and i.UserInputType==Enum.UserInputType.MouseMovement then
-        local r1=math.clamp((i.Position.X-tr.AbsolutePosition.X)/tr.AbsoluteSize.X,0,1)
-        s=math.max(1,math.floor(r1*m))
-        fi.Size=UDim2.new(r1,0,1,0)
-        kb.Position=UDim2.new(r1,-10,.5,-10)
-        sp.Text="Speed: "..s
-    end
-end)
-
-local function B(t,x,c1)
-    local b=Instance.new("TextButton",fr)
-    b.Size=UDim2.new(0,112,0,36)
-    b.Position=UDim2.new(0,x,0,162)
-    b.Text=t
-    b.BackgroundColor3=c1
-    b.TextColor3=Color3.new(1,1,1)
-    return b
-end
-
-local stB=B("Start",16,Color3.fromRGB(40,165,70))
-local spB=B("Stop",142,Color3.fromRGB(185,50,50))
-
-local function T(t,c1)
-    st.Text="Status: "..t
-    st.TextColor3=c1 or Color3.fromRGB(150,150,180)
-end
-
-local function loop()
-    while a do
-        local es=e()
-        if #es>0 then
-            T("Avoid "..#es,Color3.fromRGB(255,120,120))
-            F(es)
-        else
-            local fd=f(es)
-            if not fd then
-                T("No food") task.wait(.3)
-            else
-                T("Get "..fd[1].Name,Color3.fromRGB(90,200,90))
-                M(fd[2])
+            local d = (hrp.Position - pos).Magnitude
+            if d < bestDist then
+                bestDist = d
+                best = { instance = food, position = pos }
             end
         end
     end
-    T("Stopped")
+    return best
 end
 
-stB.MouseButton1Click:Connect(function()
-    if a then return end
-    a=true T("Running",Color3.fromRGB(90,200,90))
-    task.spawn(loop)
+local function stopMover()
+    if moverConn then moverConn:Disconnect(); moverConn = nil end
+end
+
+local function moveTo(targetPos)
+    local reached = false
+    stopMover()
+    moverConn = RunService.Heartbeat:Connect(function(dt)
+        local hrp = getHRP()
+        if not hrp or not running then reached = true; stopMover(); return end
+        
+        local avoidForce = getAvoidanceForce()
+        local finalTarget = targetPos + avoidForce
+        
+        local diff = finalTarget - hrp.Position
+        local dist = diff.Magnitude
+        
+        if dist < 2 then reached = true; stopMover(); return end
+        
+        local step = math.min(tweenSpeed * dt, dist)
+        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))
+    end)
+    while not reached and running do task.wait() end
+end
+
+-- ── GUI (ปรับปรุงขนาดและปุ่มสำหรับมือถือ) ──
+local gui = Instance.new("ScreenGui")
+gui.Name = "MobileFoodCollector"; gui.ResetOnSpawn = false; gui.Parent = player:WaitForChild("PlayerGui")
+
+local panel = Instance.new("Frame", gui)
+panel.Size = UDim2.new(0, 280, 0, 260)
+panel.Position = UDim2.new(0.5, -140, 0.4, -130)
+panel.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+Instance.new("UICorner", panel)
+
+local title = Instance.new("TextLabel", panel)
+title.Size = UDim2.new(1, 0, 0, 40); title.Text = "🦖 DINO COLLECTOR V2"; title.TextColor3 = Color3.new(1,1,1); title.BackgroundTransparency = 1; title.Font = Enum.Font.GothamBold
+
+-- Status & Count
+local statusLbl = Instance.new("TextLabel", panel)
+statusLbl.Position = UDim2.new(0, 15, 0, 45); statusLbl.Size = UDim2.new(1, -30, 0, 20); statusLbl.Text = "Status: Idle"; statusLbl.TextColor3 = Color3.new(0.8, 0.8, 0.8); statusLbl.BackgroundTransparency = 1; statusLbl.TextXAlignment = "Left"
+
+-- Speed Slider
+local speedLbl = Instance.new("TextLabel", panel)
+speedLbl.Position = UDim2.new(0, 15, 0, 70); speedLbl.Size = UDim2.new(1, -30, 0, 20); speedLbl.Text = "Speed: 100 studs/s"; speedLbl.TextColor3 = Color3.new(1, 1, 1); speedLbl.BackgroundTransparency = 1; speedLbl.TextXAlignment = "Left"
+
+local track = Instance.new("Frame", panel)
+track.Size = UDim2.new(1, -30, 0, 10); track.Position = UDim2.new(0, 15, 0, 100); track.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+local fill = Instance.new("Frame", track); fill.Size = UDim2.new(0.1, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(85, 170, 255)
+local knob = Instance.new("TextButton", track); knob.Size = UDim2.new(0, 24, 0, 24); knob.Position = UDim2.new(0.1, -12, 0.5, -12); knob.Text = ""; knob.BackgroundColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
+
+-- Slider Logic (รองรับ Touch)
+local dragging = false
+local function updateSlider(input)
+    local pos = input.Position.X - track.AbsolutePosition.X
+    local ratio = math.clamp(pos / track.AbsoluteSize.X, 0, 1)
+    tweenSpeed = math.max(10, math.floor(ratio * 500)) -- ปรับความเร็วได้สูงสุด 500
+    fill.Size = UDim2.new(ratio, 0, 1, 0)
+    knob.Position = UDim2.new(ratio, -12, 0.5, -12)
+    speedLbl.Text = "Speed: " .. tweenSpeed .. " studs/s"
+end
+
+knob.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        updateSlider(input)
+    end
 end)
 
-spB.MouseButton1Click:Connect(function()
-    a=false S() T("Stopped")
+-- Avoid Toggle
+local avoidBtn = Instance.new("TextButton", panel)
+avoidBtn.Size = UDim2.new(1, -30, 0, 35); avoidBtn.Position = UDim2.new(0, 15, 0, 135); avoidBtn.Text = "Avoid Players: ON"; avoidBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80); avoidBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", avoidBtn)
+
+avoidBtn.MouseButton1Click:Connect(function()
+    avoidPlayers = not avoidPlayers
+    avoidBtn.Text = "Avoid Players: " .. (avoidPlayers and "ON" or "OFF")
+    avoidBtn.BackgroundColor3 = avoidPlayers and Color3.fromRGB(60, 60, 80) or Color3.fromRGB(40, 40, 50)
 end)
+
+-- Start/Stop Buttons
+local startBtn = Instance.new("TextButton", panel)
+startBtn.Size = UDim2.new(0, 120, 0, 40); startBtn.Position = UDim2.new(0, 15, 0, 185); startBtn.Text = "START"; startBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 80); startBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", startBtn)
+
+local stopBtn = Instance.new("TextButton", panel)
+stopBtn.Size = UDim2.new(0, 120, 0, 40); stopBtn.Position = UDim2.new(0, 145, 0, 185); stopBtn.Text = "STOP"; stopBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40); stopBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", stopBtn)
+
+-- ── Loop ─────────────────────────────────────────────────────────
+local function collectLoop()
+    while running do
+        local food = getClosestFood()
+        if food then
+            statusLbl.Text = "Status: Collecting " .. food.instance.Name
+            moveTo(food.position)
+        else
+            statusLbl.Text = "Status: Waiting for food..."
+            task.wait(1)
+        end
+        task.wait()
+    end
+    statusLbl.Text = "Status: Stopped"
+end
+
+startBtn.MouseButton1Click:Connect(function()
+    if running then return end
+    running = true
+    task.spawn(collectLoop)
+end)
+
+stopBtn.MouseButton1Click:Connect(function()
+    running = false
+    stopMover()
+end)
+
+-- ทำให้ GUI ลากได้บนมือถือ
+local dragStart, startPos
+panel.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragStart = input.Position
+        startPos = panel.Position
+    end
+end)
+panel.InputChanged:Connect(function(input)
+    if (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) and dragStart then
+        local delta = input.Position - dragStart
+        panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+panel.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragStart = nil end
+end)
+
