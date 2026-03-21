@@ -4,6 +4,7 @@ local RunService        = game:GetService("RunService")
 local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
+if not player.Character then player.CharacterAdded:Wait() end
 
 -- Anti AFK
 player.Idled:Connect(function()
@@ -21,7 +22,7 @@ local function getHRP()
     return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- ตรวจผู้เล่นพลังสูงรอบตัว
+-- ตรวจผู้เล่นรอบตัว
 local function isDangerousNear(pos, radius)
     radius = radius or 150
     local myChar = player.Character
@@ -72,14 +73,14 @@ local function getSafeFoods(limit)
     return result
 end
 
--- Safe multi-step warp
-local function safeWarp(target)
+-- Warp ปกติ (ไม่ tween) แบบ multi-step + ปลอดภัย
+local function ultraWarp(target)
     local hrp = getHRP()
     if not hrp or not target.instance or not target.instance.Parent then return false end
     local startPos = hrp.Position
     local targetPos = target.position
     local dist = (targetPos - startPos).Magnitude
-    local steps = math.clamp(math.floor(dist / 2), 5, 30)
+    local steps = math.clamp(math.floor(dist/1.5), 5, 40)
 
     for i = 1, steps do
         if not running then return false end
@@ -87,25 +88,29 @@ local function safeWarp(target)
 
         local nextPos = startPos:Lerp(targetPos, i/steps)
 
-        if isDangerousNear(nextPos, 150) then
+        -- หยุดถ้ามีผู้เล่นใกล้
+        if isDangerousNear(nextPos,150) then
             return false
         end
 
         -- ตรวจพื้นด้วย Raycast
-        local rayOrigin = nextPos + Vector3.new(0,10,0)
-        local rayDirection = Vector3.new(0,-50,0)
+        local rayOrigin = nextPos + Vector3.new(0,5,0)
+        local rayDirection = Vector3.new(0,-20,0)
         local raycastParams = RaycastParams.new()
         raycastParams.FilterDescendantsInstances = {player.Character}
         raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-        local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-        if raycastResult then
-            nextPos = Vector3.new(nextPos.X, raycastResult.Position.Y + 3, nextPos.Z)
+
+        local rayRes = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+        if rayRes then
+            nextPos = Vector3.new(nextPos.X, rayRes.Position.Y + 3, nextPos.Z)
         else
-            nextPos = Vector3.new(nextPos.X, nextPos.Y, nextPos.Z)
+            -- ถ้าไม่มีพื้น: รอ load map
+            task.wait(0.05)
+            continue
         end
 
         hrp.CFrame = CFrame.new(nextPos)
-        task.wait(0.01)
+        task.wait(0.005) -- ทำให้ warp เร็วมาก
     end
     return true
 end
@@ -123,7 +128,7 @@ local function farmLoop()
         local foods = getSafeFoods(20)
         for _, target in ipairs(foods) do
             if not running then break end
-            safeWarp(target)
+            ultraWarp(target)
         end
         task.wait(0.01)
     end
