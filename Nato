@@ -1,5 +1,4 @@
 local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService  = game:GetService("UserInputService")
 local VirtualUser       = game:GetService("VirtualUser")
@@ -16,8 +15,6 @@ end)
 
 local running   = false
 local tweenSpeed = 100
-local moverConn  = nil
-local currentTarget = nil
 
 -- Root
 local function getHRP()
@@ -31,7 +28,7 @@ local function getHRP()
     return char.PrimaryPart
 end
 
--- ❗ ใช้ของเดิม 100%
+-- ❗ ของเดิม 100%
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -55,30 +52,14 @@ local function getClosestFood()
     return best
 end
 
-local function stopMover()
-    if moverConn then moverConn:Disconnect(); moverConn = nil end
-    currentTarget = nil
-end
-
--- 🔥 วาร์ปต่อเนื่อง (ไม่ค้าง)
+-- 🔥 วาร์ปไม่หยุด
 local function moveTo(targetPos)
-    currentTarget = targetPos
+    local hrp = getHRP()
+    if not hrp then return end
 
-    if moverConn then moverConn:Disconnect() end
-
-    moverConn = RunService.Heartbeat:Connect(function()
-        local hrp = getHRP()
-        if not hrp or not running or not currentTarget then return end
-
-        local dist = (hrp.Position - currentTarget).Magnitude
-
-        if dist < 5 then
-            currentTarget = nil
-            return
-        end
-
-        hrp.CFrame = CFrame.new(currentTarget + Vector3.new(0,5,0))
-    end)
+    hrp.CFrame = CFrame.new(targetPos + Vector3.new(0,5,0))
+    task.wait(0.15)
+    hrp.CFrame = CFrame.new(targetPos + Vector3.new(0,2,0))
 end
 
 -- GUI
@@ -181,7 +162,7 @@ end
 local startBtn = makeBtn("START", Color3.fromRGB(40,165,70), 10)
 local stopBtn  = makeBtn("STOP",  Color3.fromRGB(180,60,60), 140)
 
--- Loop
+-- Loop 🔥 (ไม่หยุด)
 local function setStatus(t)
     statusLbl.Text = "Status: "..t
 end
@@ -193,17 +174,12 @@ local function loop()
         if food then
             setStatus("Going "..food.instance.Name)
             moveTo(food.position)
-
-            repeat
-                task.wait(0.1)
-            until not running or not currentTarget
-
+            task.wait(0.15)
         else
             setStatus("No food")
             task.wait(0.3)
         end
     end
-
     setStatus("Stopped")
 end
 
@@ -216,7 +192,6 @@ end)
 
 stopBtn.MouseButton1Click:Connect(function()
     running = false
-    stopMover()
     setStatus("Stopped")
 end)
 
