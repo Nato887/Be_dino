@@ -26,13 +26,13 @@ local function getHRP()
     return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- ตรวจผู้เล่นอันตรายใกล้
+-- ตรวจผู้เล่นพลังสูงใกล้
 local function isDangerousNear(pos, radius)
     radius = radius or 150
     local myChar = player.Character
-    if not myChar then return true end
+    if not myChar then return false end
     local myHum = myChar:FindFirstChildOfClass("Humanoid")
-    if not myHum then return true end
+    if not myHum then return false end
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
@@ -77,32 +77,22 @@ local function getSafeFoods(limit)
     return result
 end
 
--- Step warp แบบ adaptive speed
-local function adaptiveWarp(targetPos)
+-- Step warp แบบปรับปรุง
+local function stepWarp(targetPos)
     local hrp = getHRP()
     if not hrp then return false end
     local startPos = hrp.Position
     local dist = (targetPos - startPos).Magnitude
-    local steps = math.clamp(math.floor(dist / 6), 2, 25)
+    local steps = math.clamp(math.floor(dist / 6), 2, 20)
 
     for i = 1, steps do
         if not running then return false end
         local nextPos = startPos:Lerp(targetPos, i/steps)
-        local safeRadius = 150
-        -- ถ้าโซนโล่ง ให้ warp มากขึ้น
-        for r = 50, 200, 50 do
-            if not isDangerousNear(nextPos, r) then
-                safeRadius = r
-            else
-                safeRadius = r
-                break
-            end
-        end
-        if isDangerousNear(nextPos, safeRadius) then
-            return false
+        if isDangerousNear(nextPos, 150) then
+            return false -- ข้ามจุดนี้
         end
         hrp.CFrame = CFrame.new(nextPos + Vector3.new(0,3,0))
-        task.wait(0.01 / (safeRadius/50)) -- warp adaptive speed
+        task.wait(0.02) -- ปรับให้เกมโหลดทัน
     end
     return true
 end
@@ -118,16 +108,12 @@ local function farmLoop()
         end
 
         local foods = getSafeFoods(12)
-
         if #foods == 0 then
             task.wait(0.1)
         else
             for _, pos in ipairs(foods) do
                 if not running then break end
-                local success = adaptiveWarp(pos)
-                if not success then
-                    task.wait(0.05)
-                end
+                stepWarp(pos) -- ข้ามจุดถ้าไม่ปลอดภัย
             end
         end
 
