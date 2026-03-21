@@ -1,12 +1,13 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local VirtualUser       = game:GetService("VirtualUser")
+local RunService        = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
--- ⚙️ ระยะวงเก็บ (ปรับได้)
-local COLLECT_RADIUS = 25
+-- ⚙️ ระยะวงเก็บ / ระยะหลบผู้เล่น
+local COLLECT_RADIUS = 100 -- 🌟 วงรอบเก็บอาหาร 100 studs
 local SAFE_RADIUS = 150
 
 -- Anti AFK
@@ -47,14 +48,12 @@ local function isDangerousNear(pos, radius)
     return false
 end
 
--- หาอาหาร
+-- หาอาหารในระยะ COLLECT_RADIUS
 local function getFoods()
     local hrp = getHRP()
     if not hrp then return {} end
 
-    local inRange = {}
-    local near = {}
-
+    local foods = {}
     for _, food in ipairs(CollectionService:GetTagged("Food")) do
         if food and food.Parent then
             local pos
@@ -63,41 +62,28 @@ local function getFoods()
             elseif food:IsA("BasePart") then
                 pos = food.Position
             end
-
-            if pos and not isDangerousNear(pos,SAFE_RADIUS) then
-                local dist = (hrp.Position - pos).Magnitude
-
-                if dist <= COLLECT_RADIUS then
-                    table.insert(inRange, {instance = food, position = pos})
-                else
-                    table.insert(near, {instance = food, position = pos, dist = dist})
-                end
+            if pos and (pos - hrp.Position).Magnitude <= COLLECT_RADIUS and not isDangerousNear(pos, SAFE_RADIUS) then
+                table.insert(foods, {instance = food, position = pos})
             end
         end
     end
 
-    if #inRange > 0 then
-        return inRange
-    end
-
-    table.sort(near, function(a,b)
-        return a.dist < b.dist
+    -- sort ใกล้มาก่อน
+    table.sort(foods, function(a,b)
+        return (a.position - hrp.Position).Magnitude < (b.position - hrp.Position).Magnitude
     end)
 
-    local result = {}
-    for i=1, math.min(10, #near) do
-        table.insert(result, near[i])
-    end
-    return result
+    return foods
 end
 
 -- Warp ขึ้นก่อนลง ตรวจสอบพื้น
 local function godWarp(target)
     local hrp = getHRP()
     if not hrp or not target.instance or not target.instance.Parent then return end
-
     local pos = target.position
-    hrp.CFrame = CFrame.new(pos + Vector3.new(0,25,0)) -- ขึ้นก่อน
+
+    -- ขึ้นก่อน
+    hrp.CFrame = CFrame.new(pos + Vector3.new(0,25,0))
 
     local groundPos = nil
     local tries = 0
@@ -113,13 +99,13 @@ local function godWarp(target)
     end
 
     if not groundPos then return end
-    hrp.CFrame = CFrame.new(groundPos + Vector3.new(0,3,0)) -- ลงเก็บ
+    hrp.CFrame = CFrame.new(groundPos + Vector3.new(0,3,0))
 end
 
--- ตรวจและ respawn
+-- ตรวจ respawn / Humanoid
 local function ensureCharacter()
     local char = player.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then
         player.CharacterAdded:Wait()
         task.wait(0.5)
@@ -131,19 +117,52 @@ local function farmLoop()
     while running do
         ensureCharacter()
         local foods = getFoods()
-
-        for _, f in ipairs(foods) do
-            if not running then break end
-            ensureCharacter()
-            godWarp(f)
+        if #foods == 0 then
+            task.wait(0.2)
+        else
+            for _, f in ipairs(foods) do
+                if not running then break end
+                ensureCharacter()
+                godWarp(f)
+            end
         end
-
         task.wait(0.01)
     end
 end
 
 -- GUI
-local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+local gui = Instance.new("ScreenGui")
+gui.Name = "FoodCollector"
 gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
 
-local start = Instance.new("TextButton", gui
+local start = Instance.new("TextButton", gui)
+start.Size = UDim2.new(0,100,0,40)
+start.Position = UDim2.new(0,20,0,20)
+start.Text = "START"
+
+local stop = Instance.new("TextButton", gui)
+stop.Size = UDim2.new(0,100,0,40)
+stop.Position = UDim2.new(0,20,0,70)
+stop.Text = "STOP"
+
+start.MouseButton1Click:Connect(function()
+    if running then return end
+    running = true
+    task.spawn(farmLoop)
+end)
+
+stop.MouseButton1Click:Connect(function()
+    running = false
+end)
+
+-- 🔥 Failsafe กันตกแมพ
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        local hrp = getHRP()
+        if hrp and hrp.Position.Y < -20 then
+            hrp.CFrame = CFrame.new(0,50,0)
+        end
+    end
+end)
