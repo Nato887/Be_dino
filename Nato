@@ -1,6 +1,7 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
 local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
@@ -70,31 +71,24 @@ local function getSafeFoods(limit)
     return result
 end
 
--- วาร์ปช้า + ปลอดภัย
-local function safeWarp(pos)
+-- Warp แบบ chunked / step
+local function stepWarp(targetPos)
     local hrp = getHRP()
     if not hrp then return end
-    -- step 1: ขึ้นสูง
-    hrp.CFrame = CFrame.new(pos + Vector3.new(0,6,0))
-    task.wait(0.05) -- ให้เกมโหลด
-    -- step 2: ลงเก็บ
-    hrp.CFrame = CFrame.new(pos + Vector3.new(0,2,0))
-    task.wait(0.05)
-end
-
--- LOOP หลัก
-local function farmLoop()
-    while running do
-        local foods = getSafeFoods(8) -- เก็บหลายจุดต่อรอบ
-        for _, f in ipairs(foods) do
-            if not isDangerousNear(f.position) then
-                safeWarp(f.position)
-            else
-                task.wait(0.2) -- พบผู้เล่นพลังสูง → รอ
-            end
+    local startPos = hrp.Position
+    local dist = (targetPos - startPos).Magnitude
+    local steps = math.max(1, math.floor(dist/3)) -- แบ่งเป็น step เล็กๆ
+    for i=1, steps do
+        if not running then break end
+        local nextPos = startPos:Lerp(targetPos, i/steps)
+        if isDangerousNear(nextPos) then
+            task.wait(0.1) -- เจอผู้เล่นพลังสูง → รอ
+            return false
         end
-        task.wait(0.05) -- ลื่นสุด
+        hrp.CFrame = CFrame.new(nextPos + Vector3.new(0,2,0))
+        task.wait(0.03) -- ให้เกมโหลด
     end
+    return true
 end
 
 -- GUI
@@ -109,6 +103,40 @@ local stop = Instance.new("TextButton", gui)
 stop.Size = UDim2.new(0,100,0,40)
 stop.Position = UDim2.new(0,20,0,70)
 stop.Text = "STOP"
+
+local statusLbl = Instance.new("TextLabel", gui)
+statusLbl.Position = UDim2.new(0,20,0,120)
+statusLbl.Size = UDim2.new(0,300,0,30)
+statusLbl.Text = "Status: Idle"
+statusLbl.TextColor3 = Color3.new(1,1,1)
+statusLbl.BackgroundTransparency = 1
+
+local function setStatus(txt)
+    statusLbl.Text = "Status: "..txt
+end
+
+-- LOOP หลัก
+local function farmLoop()
+    while running do
+        local foods = getSafeFoods(10)
+        if #foods > 0 then
+            setStatus("Farming "..#foods.." foods")
+            for _, f in ipairs(foods) do
+                if not running then break end
+                local success = stepWarp(f.position)
+                if not success then
+                    task.wait(0.2) -- เจอผู้เล่นพลังสูง → รอแล้วหาอาหารใหม่
+                    break
+                end
+            end
+        else
+            setStatus("No safe food")
+            task.wait(0.2)
+        end
+        task.wait(0.05)
+    end
+    setStatus("Stopped")
+end
 
 start.MouseButton1Click:Connect(function()
     if running then return end
