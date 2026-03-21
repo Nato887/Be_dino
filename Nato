@@ -66,9 +66,11 @@ local sliderBg = Instance.new("Frame", panel)
 sliderBg.Size = UDim2.new(0.8, 0, 0, 15)
 sliderBg.Position = UDim2.new(0.1, 0, 0, 70)
 sliderBg.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+
 local sliderFill = Instance.new("Frame", sliderBg)
 sliderFill.Size = UDim2.new(tweenSpeed/500, 0, 1, 0)
 sliderFill.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+
 local sliderBtn = Instance.new("TextButton", sliderBg)
 sliderBtn.Size = UDim2.new(1, 0, 1, 0)
 sliderBtn.BackgroundTransparency = 1
@@ -128,10 +130,10 @@ toggle.MouseButton1Click:Connect(function()
     panel.Visible = not panel.Visible
 end)
 
--- ── ระบบเดิน Tween ──
+-- ── ระบบเดิน Tween ใหม่ ──
 task.spawn(function()
     while true do
-        task.wait(0.2)
+        task.wait(0.1)
         if running then
             local hrp = getHRP()
             if not hrp then continue end
@@ -141,14 +143,18 @@ task.spawn(function()
                 targetFood = getClosestFood()
             end
 
-            if targetFood then
+            if targetFood and targetFood.instance and targetFood.instance.Parent then
                 local targetPos = Vector3.new(targetFood.position.X, hrp.Position.Y, targetFood.position.Z)
                 local dist = (hrp.Position - targetPos).Magnitude
 
-                if dist > 3 then
-                    if currentTween then currentTween:Cancel() end
+                if dist > 2 then
+                    if currentTween then
+                        currentTween:Cancel()
+                        currentTween = nil
+                    end
+                    -- ใช้ CFrame.lookAt เพื่อหันหน้าไปหาเป้าหมาย
                     local info = TweenInfo.new(dist / tweenSpeed, Enum.EasingStyle.Linear)
-                    currentTween = TweenService:Create(hrp, info, {CFrame = CFrame.new(targetPos)})
+                    currentTween = TweenService:Create(hrp, info, {CFrame = CFrame.lookAt(hrp.Position, targetPos)})
                     currentTween:Play()
                     currentTween.Completed:Wait()
                 else
