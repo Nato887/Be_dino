@@ -1,6 +1,5 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
-local RunService        = game:GetService("RunService")
 local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
@@ -22,7 +21,7 @@ local function getHRP()
     return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- ตรวจผู้เล่นรอบตัว
+-- ตรวจผู้เล่นใกล้
 local function isDangerousNear(pos, radius)
     radius = radius or 150
     local myChar = player.Character
@@ -58,7 +57,7 @@ local function getSafeFoods(limit)
             elseif food:IsA("BasePart") then
                 pos = food.Position
             end
-            if pos and food.Parent and not isDangerousNear(pos,150) then
+            if pos and not isDangerousNear(pos,150) then
                 table.insert(foods, {instance = food, position = pos})
             end
         end
@@ -73,49 +72,29 @@ local function getSafeFoods(limit)
     return result
 end
 
--- Warp ปกติ (ไม่ tween) แบบ multi-step + ปลอดภัย
-local function ultraWarp(target)
+-- Warp ทันทีไปเป้าหมาย (God Warp) ปลอดภัย
+local function godWarp(target)
     local hrp = getHRP()
     if not hrp or not target.instance or not target.instance.Parent then return false end
-    local startPos = hrp.Position
     local targetPos = target.position
-    local dist = (targetPos - startPos).Magnitude
-    local steps = math.clamp(math.floor(dist/1.5), 5, 40)
 
-    for i = 1, steps do
-        if not running then return false end
-        if not target.instance or not target.instance.Parent then return false end
-
-        local nextPos = startPos:Lerp(targetPos, i/steps)
-
-        -- หยุดถ้ามีผู้เล่นใกล้
-        if isDangerousNear(nextPos,150) then
-            return false
-        end
-
-        -- ตรวจพื้นด้วย Raycast
-        local rayOrigin = nextPos + Vector3.new(0,5,0)
-        local rayDirection = Vector3.new(0,-20,0)
-        local raycastParams = RaycastParams.new()
-        raycastParams.FilterDescendantsInstances = {player.Character}
-        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-
-        local rayRes = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-        if rayRes then
-            nextPos = Vector3.new(nextPos.X, rayRes.Position.Y + 3, nextPos.Z)
-        else
-            -- ถ้าไม่มีพื้น: รอ load map
-            task.wait(0.05)
-            continue
-        end
-
-        hrp.CFrame = CFrame.new(nextPos)
-        task.wait(0.005) -- ทำให้ warp เร็วมาก
+    -- ตรวจพื้นด้วย raycast
+    local rayOrigin = targetPos + Vector3.new(0,5,0)
+    local rayDirection = Vector3.new(0,-20,0)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {player.Character}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local rayRes = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    if rayRes then
+        targetPos = Vector3.new(targetPos.X, rayRes.Position.Y + 3, targetPos.Z)
+        hrp.CFrame = CFrame.new(targetPos)
+        return true
+    else
+        return false -- ไม่มีพื้น, skip
     end
-    return true
 end
 
--- FARM LOOP
+-- LOOP FARM
 local function farmLoop()
     while running do
         local hrp = getHRP()
@@ -126,9 +105,14 @@ local function farmLoop()
         end
 
         local foods = getSafeFoods(20)
+        if #foods == 0 then
+            task.wait(0.2)
+            continue
+        end
+
         for _, target in ipairs(foods) do
             if not running then break end
-            ultraWarp(target)
+            godWarp(target)
         end
         task.wait(0.01)
     end
