@@ -16,13 +16,18 @@ end)
 
 local running   = false
 local tweenSpeed = 100
-local moverConn  = nil
 
 -- Root
+local function getHumanoid()
+    local char = player.Character
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
 local function getHRP()
     local char = player.Character
     if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+    return char:FindFirstChild("HumanoidRootPart")
 end
 
 local function getClosestFood()
@@ -43,27 +48,15 @@ local function getClosestFood()
     return best
 end
 
-local function stopMover()
-    if moverConn then moverConn:Disconnect() moverConn = nil end
-end
-
+-- ✅ ใช้ MoveTo แทน (ไม่ตกแมพ)
 local function moveTo(pos)
-    local reached = false
-    stopMover()
+    local hum = getHumanoid()
+    if not hum then return end
 
-    moverConn = RunService.Heartbeat:Connect(function(dt)
-        local hrp = getHRP()
-        if not hrp or not running then reached = true stopMover() return end
+    hum.WalkSpeed = math.clamp(tweenSpeed/10, 8, 100) -- ปรับตามสปีด
 
-        local diff = pos - hrp.Position
-        local dist = diff.Magnitude
-
-        if dist < 2 then reached = true stopMover() return end
-
-        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * math.min(dist, tweenSpeed*dt))
-    end)
-
-    while not reached do task.wait() end
+    hum:MoveTo(pos)
+    hum.MoveToFinished:Wait()
 end
 
 -- GUI
@@ -83,7 +76,6 @@ status.Text = "Status: Idle"
 status.BackgroundTransparency = 1
 status.TextColor3 = Color3.new(1,1,1)
 
--- Speed label
 local speedLbl = Instance.new("TextLabel", panel)
 speedLbl.Position = UDim2.new(0,0,0,30)
 speedLbl.Size = UDim2.new(1,0,0,25)
@@ -94,16 +86,13 @@ speedLbl.Text = "Speed: 100"
 local track = Instance.new("Frame", panel)
 track.Position = UDim2.new(0,10,0,70)
 track.Size = UDim2.new(1,-20,0,8)
-track.BackgroundColor3 = Color3.fromRGB(60,60,80)
 
 local fill = Instance.new("Frame", track)
 fill.Size = UDim2.new(0.1,0,1,0)
-fill.BackgroundColor3 = Color3.fromRGB(100,170,255)
 
 local knob = Instance.new("Frame", track)
 knob.Size = UDim2.new(0,18,0,18)
 knob.Position = UDim2.new(0.1,-9,0.5,-9)
-knob.BackgroundColor3 = Color3.new(1,1,1)
 
 local dragging = false
 
@@ -115,10 +104,10 @@ local function updateSlider(x)
     speedLbl.Text = "Speed: "..tweenSpeed
 end
 
--- รองรับกดทั้งแถบ
 track.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
         dragging = true
+        panel.Draggable = false -- 🔥 ปิดลากหน้าต่าง
         updateSlider(i.Position.X)
     end
 end)
@@ -132,6 +121,7 @@ end)
 UserInputService.InputEnded:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
         dragging = false
+        panel.Draggable = true -- 🔥 เปิดกลับ
     end
 end)
 
@@ -140,13 +130,11 @@ local startBtn = Instance.new("TextButton", panel)
 startBtn.Position = UDim2.new(0,10,0,120)
 startBtn.Size = UDim2.new(0,110,0,40)
 startBtn.Text = "START"
-startBtn.BackgroundColor3 = Color3.fromRGB(50,180,80)
 
 local stopBtn = Instance.new("TextButton", panel)
 stopBtn.Position = UDim2.new(0,130,0,120)
 stopBtn.Size = UDim2.new(0,110,0,40)
 stopBtn.Text = "STOP"
-stopBtn.BackgroundColor3 = Color3.fromRGB(180,60,60)
 
 local function loop()
     while running do
@@ -171,6 +159,5 @@ end)
 
 stopBtn.MouseButton1Click:Connect(function()
     running = false
-    stopMover()
     status.Text = "Stopped"
 end)
