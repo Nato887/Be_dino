@@ -1,5 +1,6 @@
 local Players           = game:GetService("Players")
 local TweenService      = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
 local UserInputService  = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
@@ -8,42 +9,51 @@ local avoidPlayers = true
 local tweenSpeed = 100
 local currentTween = nil
 
--- ── ฟังก์ชันหาตำแหน่งตัวละคร ──
+-- ── ฟังก์ชันหาตำแหน่งตัวละคร (RootPart) ──
 local function getHRP()
     local char = player.Character
     return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 end
 
--- ── ฟังก์ชันหลบผู้เล่นอื่น ──
+-- ── ระบบหลบผู้เล่นอื่นในระยะ 50 Studs ──
 local function getAvoidanceOffset()
+    if not avoidPlayers then return Vector3.new() end
     local hrp = getHRP()
-    if not hrp or not avoidPlayers then return Vector3.new() end
+    if not hrp then return Vector3.new() end
     local force = Vector3.new()
     for _, other in ipairs(Players:GetPlayers()) do
         if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
-            local otherPos = other.Character.HumanoidRootPart.Position
-            local diff = hrp.Position - otherPos
-            if diff.Magnitude < 30 then 
-                force = force + (diff.Unit * (30 - diff.Magnitude))
+            local otherHrp = other.Character.HumanoidRootPart
+            local diff = hrp.Position - otherHrp.Position
+            if diff.Magnitude < 50 then -- ระยะหลบ 50 studs ตามสั่ง
+                force = force + (diff.Unit * (50 - diff.Magnitude))
             end
         end
     end
     return force
 end
 
--- ── แก้ไขใหม่: ค้นหาเนื้อ/ของกินในแมพ ──
+-- ── ระบบค้นหาอาหาร (รองรับ Tag และ ชื่อ) ──
 local function getTarget()
     local hrp = getHRP()
     if not hrp then return nil end
     local best, bestDist = nil, math.huge
     
-    -- ค้นหาวัตถุที่มีชื่อว่า Meat, Food, หรือ Egg ใน Workspace
+    -- รวมการหาจาก Tag และจากชื่อใน Workspace
+    local targets = CollectionService:GetTagged("Food")
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and (obj.Name == "Meat" or obj.Name == "Food" or obj.Name == "Egg") then
-            local dist = (hrp.Position - obj.Position).Magnitude
+        if obj:IsA("BasePart") and (obj.Name:find("Meat") or obj.Name:find("Food") or obj.Name:find("Egg")) then
+            table.insert(targets, obj)
+        end
+    end
+
+    for _, obj in ipairs(targets) do
+        if obj and obj.Parent then
+            local pos = obj:IsA("Model") and obj:GetPivot().Position or obj.Position
+            local dist = (hrp.Position - pos).Magnitude
             if dist < bestDist then
                 bestDist = dist
-                best = {instance = obj, pos = obj.Position}
+                best = {instance = obj, pos = pos}
             end
         end
     end
@@ -54,57 +64,113 @@ local function stopTween()
     if currentTween then currentTween:Cancel(); currentTween = nil end
 end
 
--- ── แก้ไขใหม่: ระบบเคลื่อนที่ ──
+-- ── ระบบเดินแบบ Tween ──
 local function moveTo(targetPos)
     local hrp = getHRP()
     if not hrp then return end
-    
     stopTween()
+    
     local avoid = getAvoidanceOffset()
-    -- คำนวณตำแหน่งปลายทาง (ล็อกความสูง Y เท่าเดิมกันตกแมพ)
     local finalPos = Vector3.new(targetPos.X + avoid.X, hrp.Position.Y, targetPos.Z + avoid.Z)
     
     local dist = (hrp.Position - finalPos).Magnitude
-    if dist < 3 then return end -- ถ้าใกล้มากแล้วหยุด
-
-    local duration = dist / math.max(tweenSpeed, 10)
-    local info = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+    if dist < 4 then return end
     
-    -- หมุนหน้าไปหาเป้าหมายและเลื่อนตำแหน่ง
-    currentTween = TweenService:Create(hrp, info, {
+    local duration = dist / math.max(tweenSpeed, 10)
+    currentTween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
         CFrame = CFrame.new(finalPos, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))
     })
     currentTween:Play()
-    task.wait(duration) -- รอจนถึงที่หมาย
+    task.wait(duration)
 end
 
--- ── GUI (ส่วนเดิมแต่ปรับปรุง Logic ปุ่ม) ──
+-- ── GUI ──────────────────────────────────────────────────────────
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "DinoV2_Fixed"; gui.ResetOnSpawn = false
+gui.Name = "DinoFarm_Pro"; gui.ResetOnSpawn = false
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 260, 0, 220); main.Position = UDim2.new(0.5, -130, 0.4, -110)
-main.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+main.Size = UDim2.new(0, 260, 0, 230); main.Position = UDim2.new(0.5, -130, 0.4, -115)
+main.BackgroundColor3 = Color3.fromRGB(25, 25, 35); main.Active = true; main.Draggable = true
 Instance.new("UICorner", main)
 
+-- หัวข้อและปุ่มปิด/พับ
 local title = Instance.new("TextLabel", main)
-title.Size = UDim2.new(1, 0, 0, 40); title.Text = "🦖 DINO FARM V2 (FIXED)"; title.TextColor3 = Color3.new(1,1,1); title.BackgroundTransparency = 1
+title.Size = UDim2.new(1, -70, 0, 40); title.Position = UDim2.new(0, 10, 0, 0)
+title.Text = "🦖 DINO PRO V2"; title.TextColor3 = Color3.new(1,1,1); title.BackgroundTransparency = 1; title.TextXAlignment = "Left"; title.Font = "GothamBold"
 
-local status = Instance.new("TextLabel", main)
-status.Size = UDim2.new(1, 0, 0, 25); status.Position = UDim2.new(0, 0, 0, 40)
-status.Text = "Status: Idle"; status.TextColor3 = Color3.new(0.8,0.8,0.8); status.BackgroundTransparency = 1
+local closeBtn = Instance.new("TextButton", main)
+closeBtn.Size = UDim2.new(0, 30, 0, 30); closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.Text = "✕"; closeBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50); closeBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", closeBtn)
 
-local startBtn = Instance.new("TextButton", main)
-startBtn.Size = UDim2.new(0, 110, 0, 40); startBtn.Position = UDim2.new(0, 15, 0, 140)
+local miniBtn = Instance.new("TextButton", main)
+miniBtn.Size = UDim2.new(0, 30, 0, 30); miniBtn.Position = UDim2.new(1, -70, 0, 5)
+miniBtn.Text = "_"; miniBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70); miniBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", miniBtn)
+
+local content = Instance.new("Frame", main)
+content.Size = UDim2.new(1, 0, 1, -40); content.Position = UDim2.new(0, 0, 0, 40); content.BackgroundTransparency = 1
+
+local status = Instance.new("TextLabel", content)
+status.Size = UDim2.new(1, 0, 0, 25); status.Text = "Status: Idle"; status.TextColor3 = Color3.fromRGB(200, 200, 200); status.BackgroundTransparency = 1
+
+-- Slider ปรับ Speed
+local speedLbl = Instance.new("TextLabel", content)
+speedLbl.Size = UDim2.new(1, -20, 0, 20); speedLbl.Position = UDim2.new(0, 10, 0, 30)
+speedLbl.Text = "Speed: 100"; speedLbl.TextColor3 = Color3.new(1,1,1); speedLbl.BackgroundTransparency = 1; speedLbl.TextXAlignment = "Left"
+
+local track = Instance.new("Frame", content)
+track.Size = UDim2.new(1, -30, 0, 6); track.Position = UDim2.new(0, 15, 0, 60); track.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+local knob = Instance.new("TextButton", track)
+knob.Size = UDim2.new(0, 18, 0, 18); knob.Position = UDim2.new(0.1, -9, 0.5, -9); knob.Text = ""; knob.BackgroundColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
+
+-- ปุ่ม Avoid Player
+local avoidBtn = Instance.new("TextButton", content)
+avoidBtn.Size = UDim2.new(1, -30, 0, 35); avoidBtn.Position = UDim2.new(0, 15, 0, 80)
+avoidBtn.Text = "Avoid Players (50s): ON"; avoidBtn.BackgroundColor3 = Color3.fromRGB(60, 80, 150); avoidBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", avoidBtn)
+
+-- ปุ่ม Start/Stop
+local startBtn = Instance.new("TextButton", content)
+startBtn.Size = UDim2.new(0, 110, 0, 40); startBtn.Position = UDim2.new(0, 15, 0, 125)
 startBtn.Text = "START"; startBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 80); startBtn.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", startBtn)
 
-local stopBtn = Instance.new("TextButton", main)
-stopBtn.Size = UDim2.new(0, 110, 0, 40); stopBtn.Position = UDim2.new(1, -125, 0, 140)
+local stopBtn = Instance.new("TextButton", content)
+stopBtn.Size = UDim2.new(0, 110, 0, 40); stopBtn.Position = UDim2.new(1, -125, 0, 125)
 stopBtn.Text = "STOP"; stopBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50); stopBtn.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", stopBtn)
 
--- ── ระบบปุ่มกด ──
+-- ── Logic ────────────────────────────────────────────────────────
+miniBtn.MouseButton1Click:Connect(function()
+    content.Visible = not content.Visible
+    main.Size = content.Visible and UDim2.new(0, 260, 0, 230) or UDim2.new(0, 260, 0, 40)
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    running = false; stopTween(); gui:Destroy()
+end)
+
+avoidBtn.MouseButton1Click:Connect(function()
+    avoidPlayers = not avoidPlayers
+    avoidBtn.Text = "Avoid Players (50s): " .. (avoidPlayers and "ON" or "OFF")
+    avoidBtn.BackgroundColor3 = avoidPlayers and Color3.fromRGB(60, 80, 150) or Color3.fromRGB(50, 50, 50)
+end)
+
+-- Slider Logic
+local dragging = false
+knob.MouseButton1Down:Connect(function() dragging = true end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+UserInputService.InputChanged:Connect(function(i)
+    if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+        local r = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        tweenSpeed = math.floor(r * 1000)
+        knob.Position = UDim2.new(r, -9, 0.5, -9)
+        speedLbl.Text = "Speed: " .. tweenSpeed
+    end
+end)
+
 startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
@@ -113,20 +179,20 @@ startBtn.MouseButton1Click:Connect(function()
         while running do
             local target = getTarget()
             if target then
-                status.Text = "Status: Eating " .. target.instance.Name
+                status.Text = "Status: Going to " .. target.instance.Name
                 moveTo(target.pos)
             else
-                status.Text = "Status: Searching Food..."
-                task.wait(1)
+                status.Text = "Status: Searching..."
+                task.wait(0.5)
             end
             task.wait(0.1)
         end
-        status.Text = "Status: Stopped"
+        status.Text = "Status: Idle"
         startBtn.Text = "START"
     end)
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
-    running = false
-    stopTween()
+    running = false; stopTween()
 end)
+
