@@ -1,6 +1,7 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local VirtualUser       = game:GetService("VirtualUser")
+local RunService        = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
@@ -20,7 +21,7 @@ local function getHRP()
     return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- 🔥 หลบผู้เล่น 150 (อัปแล้ว)
+-- 👤 หลบผู้เล่น 150
 local function isPlayerNear(pos)
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
@@ -33,12 +34,13 @@ local function isPlayerNear(pos)
     return false
 end
 
--- หาอาหาร
+-- 🧠 AI PATH
 local function getFoods()
     local hrp = getHRP()
     if not hrp then return {} end
 
-    local foods = {}
+    local safeFoods = {}
+    local allFoods = {}
 
     for _, food in CollectionService:GetTagged("Food") do
         if food and food.Parent then
@@ -49,36 +51,71 @@ local function getFoods()
                 pos = food.Position
             end
 
-            if pos and not isPlayerNear(pos) then
-                table.insert(foods, pos)
+            if pos then
+                table.insert(allFoods, pos)
+
+                if not isPlayerNear(pos) then
+                    table.insert(safeFoods, pos)
+                end
             end
         end
     end
 
-    return foods
+    local list = (#safeFoods > 0) and safeFoods or allFoods
+
+    table.sort(list, function(a,b)
+        return (a - hrp.Position).Magnitude < (b - hrp.Position).Magnitude
+    end)
+
+    return list
 end
 
--- ⚡ GOD MAX WARP (อัปแล้ว)
+-- ⚡ AI SPEED
+local warpDelay = 0.03
+local minDelay = 0.01
+local maxDelay = 0.08
+local successStreak = 0
+
 local function warp(pos)
     local hrp = getHRP()
-    if not hrp then return end
+    if not hrp then return false end
 
-    -- วาร์ปสูงก่อน (กันบัค/กันตก)
+    -- วาร์ปขึ้นก่อน
     hrp.CFrame = CFrame.new(pos + Vector3.new(0,6,0))
+    task.wait(warpDelay)
 
-    -- snap ลงเก็บทันที
+    -- ลงเก็บ
     hrp.CFrame = CFrame.new(pos + Vector3.new(0,2,0))
+
+    return (hrp.Position - pos).Magnitude < 10
 end
 
--- Loop
+-- LOOP
 local function loop()
     while running do
         local foods = getFoods()
 
         for _, pos in ipairs(foods) do
-            if not isPlayerNear(pos) then -- 🔥 เช็คซ้ำกันพลาด
-                warp(pos)
+            local fps = 1 / RunService.Heartbeat:Wait()
+            local success = warp(pos)
+
+            -- ปรับสปีด
+            if success then
+                successStreak += 1
+                warpDelay = math.max(minDelay, warpDelay - (successStreak > 5 and 0.003 or 0.001))
+            else
+                successStreak = 0
+                warpDelay = math.min(maxDelay, warpDelay + 0.006)
             end
+
+            -- ปรับตาม FPS
+            if fps < 40 then
+                warpDelay = math.min(maxDelay, warpDelay + 0.004)
+            elseif fps > 55 then
+                warpDelay = math.max(minDelay, warpDelay - 0.002)
+            end
+
+            task.wait(warpDelay)
         end
 
         task.wait()
@@ -86,7 +123,7 @@ local function loop()
 end
 
 -- GUI
-local gui = Instance.new("ScreenGui", player.PlayerGui)
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 
 local start = Instance.new("TextButton", gui)
 start.Size = UDim2.new(0,100,0,40)
@@ -99,6 +136,7 @@ stop.Position = UDim2.new(0,20,0,70)
 stop.Text = "STOP"
 
 start.MouseButton1Click:Connect(function()
+    if running then return end
     running = true
     task.spawn(loop)
 end)
