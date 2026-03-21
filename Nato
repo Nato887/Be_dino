@@ -1,7 +1,6 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local VirtualUser       = game:GetService("VirtualUser")
-local RunService        = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
@@ -70,24 +69,17 @@ local function getFoods()
     return list
 end
 
--- ⚡ AI SPEED
-local warpDelay = 0.03
-local minDelay = 0.01
-local maxDelay = 0.08
-local successStreak = 0
-
+-- ⚡ วาร์ปปกติ (ไม่เร็วเกิน)
 local function warp(pos)
     local hrp = getHRP()
-    if not hrp then return false end
+    if not hrp then return end
 
-    -- วาร์ปขึ้นก่อน
+    -- ขึ้นก่อน
     hrp.CFrame = CFrame.new(pos + Vector3.new(0,6,0))
-    task.wait(warpDelay)
+    task.wait(0.04) -- 🔥 ให้เกมโหลด
 
     -- ลงเก็บ
     hrp.CFrame = CFrame.new(pos + Vector3.new(0,2,0))
-
-    return (hrp.Position - pos).Magnitude < 10
 end
 
 -- LOOP
@@ -96,26 +88,8 @@ local function loop()
         local foods = getFoods()
 
         for _, pos in ipairs(foods) do
-            local fps = 1 / RunService.Heartbeat:Wait()
-            local success = warp(pos)
-
-            -- ปรับสปีด
-            if success then
-                successStreak += 1
-                warpDelay = math.max(minDelay, warpDelay - (successStreak > 5 and 0.003 or 0.001))
-            else
-                successStreak = 0
-                warpDelay = math.min(maxDelay, warpDelay + 0.006)
-            end
-
-            -- ปรับตาม FPS
-            if fps < 40 then
-                warpDelay = math.min(maxDelay, warpDelay + 0.004)
-            elseif fps > 55 then
-                warpDelay = math.max(minDelay, warpDelay - 0.002)
-            end
-
-            task.wait(warpDelay)
+            warp(pos)
+            task.wait(0.03) -- 🔥 กันโหลดไม่ทัน
         end
 
         task.wait()
