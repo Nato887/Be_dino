@@ -2,16 +2,16 @@
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
-local UserInputService  = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
 local running = false
 local moverConn = nil
-local warpSteps = 20 -- จำนวนครั้งวาร์ปต่อเฟรม
+local warpSteps = 40 -- จำนวนครั้งวาร์ปต่อเฟรม
+local avoidRadius = 50 -- ระยะตรวจจับผู้เล่นใกล้เป้าหมาย
 
--- ── Get the REAL root (non-massless, direct child of character) ──
+-- ── Get the REAL root ─────────────────────────────────────
 local function getHRP()
     local char = player.Character
     if not char then return nil end
@@ -23,7 +23,7 @@ local function getHRP()
     return char.PrimaryPart
 end
 
--- ── Find closest food ─────────────────────────────────────
+-- ── Find closest food with player avoidance ───────────────
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -35,6 +35,19 @@ local function getClosestFood()
             elseif food:IsA("BasePart") then return food.Position end
         end)
         if ok and pos then
+            -- ตรวจผู้เล่นใกล้เป้าหมาย
+            local blocked = false
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= player and p.Character and p.Character.PrimaryPart then
+                    local d = (pos - p.Character.PrimaryPart.Position).Magnitude
+                    if d < avoidRadius then
+                        blocked = true
+                        break
+                    end
+                end
+            end
+            if blocked then continue end
+
             local d = (hrp.Position - pos).Magnitude
             if d < bestDist then
                 bestDist = d
@@ -60,7 +73,7 @@ local function moveTo(targetPos)
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
         if dist < 2 then reached = true; stopMover(); return end
-        -- Warp 20 steps per frame
+        -- Warp 40 steps per frame
         local step = diff / warpSteps
         for i = 1, warpSteps do
             hrp.CFrame = hrp.CFrame + step
