@@ -3,76 +3,47 @@ local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService  = game:GetService("UserInputService")
 
-local player = Players.LocalPlayer
+local player = game:GetService("Players").LocalPlayer
+if not player.Character then player.CharacterAdded:Wait() end
 
--- รอ Character ให้พร้อม
-local function waitChar()
-    local char = player.Character or player.CharacterAdded:Wait()
-    repeat task.wait() until char:FindFirstChild("HumanoidRootPart")
-    return char
-end
-
-local function getHRP()
-    local char = player.Character
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart")
-end
-
-local running    = false
+local running   = false
 local tweenSpeed = 100
 local moverConn  = nil
 
-local BOOST = 5
-local TARGET_SAFE = 75
-local SELF_DANGER = 50
+local MAX_SPEED = 2000 -- 🔥 เพิ่มสปีดสูงสุด
 
--- 🧠 เช็คผู้เล่นใกล้
-local function isPlayerNear(pos, radius)
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            if (p.Character.HumanoidRootPart.Position - pos).Magnitude <= radius then
-                return true
-            end
+-- ── Get the REAL root ──
+local function getHRP()
+    local char = player.Character
+    if not char then return nil end
+    for _, v in ipairs(char:GetChildren()) do
+        if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
+            return v
         end
     end
-    return false
+    return char.PrimaryPart
 end
 
-local function isPlayerNearMe()
-    local hrp = getHRP()
-    if not hrp then return false end
-    return isPlayerNear(hrp.Position, SELF_DANGER)
-end
-
--- 🔎 หาอาหาร (ไม่มี continue แล้ว)
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
+    local best, bestDist = nil, math.huge
 
-    local best = nil
-    local bestDist = math.huge
-
-    for _, food in ipairs(CollectionService:GetTagged("Food")) do
-        if food and food.Parent then
-            local pos
-            if food:IsA("Model") then
-                pos = food:GetPivot().Position
-            elseif food:IsA("BasePart") then
-                pos = food.Position
-            end
-
-            if pos then
-                if not isPlayerNear(pos, TARGET_SAFE) then
-                    local d = (hrp.Position - pos).Magnitude
-                    if d < bestDist then
-                        bestDist = d
-                        best = {instance = food, position = pos}
-                    end
+    for _, food in CollectionService:GetTagged("Food") do
+        if food and food.Parent then -- 🔧 เอา continue ออก
+            local ok, pos = pcall(function()
+                if food:IsA("Model") then return food:GetPivot().Position
+                elseif food:IsA("BasePart") then return food.Position end
+            end)
+            if ok and pos then
+                local d = (hrp.Position - pos).Magnitude
+                if d < bestDist then
+                    bestDist = d
+                    best = { instance = food, position = pos }
                 end
             end
         end
     end
-
     return best
 end
 
@@ -80,117 +51,141 @@ local function stopMover()
     if moverConn then moverConn:Disconnect(); moverConn = nil end
 end
 
--- ⚡ เคลื่อนที่ + หนี
 local function moveTo(targetPos)
     local reached = false
     stopMover()
 
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
-        if not hrp or not running then
-            reached = true
-            stopMover()
-            return
-        end
-
-        -- 🏃 หนีผู้เล่น
-        if isPlayerNearMe() then
-            hrp.CFrame = hrp.CFrame + Vector3.new(math.random(-120,120),0,math.random(-120,120))
-            reached = true
-            stopMover()
-            return
-        end
-
-        -- 🧠 กันเป้าหมาย
-        if isPlayerNear(targetPos, TARGET_SAFE) then
-            reached = true
-            stopMover()
-            return
-        end
+        if not hrp or not running then reached = true; stopMover(); return end
 
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
+        if dist < 2 then reached = true; stopMover(); return end
 
-        if dist < 2 then
-            reached = true
-            stopMover()
-            return
-        end
+        -- 🔥 กันค้างตอนสปีดสูง
+        local step = math.min(tweenSpeed * dt, dist, 50)
 
-        local step = math.min((tweenSpeed * BOOST) * dt, dist)
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
 
-    while not reached do
-        task.wait()
-    end
+    while not reached do task.wait(0.05) end
 end
-
--- 💀 ตายแล้วหยุด
-local function bindCharacter(char)
-    local hum = char:WaitForChild("Humanoid")
-    hum.Died:Connect(function()
-        running = false
-        stopMover()
-    end)
-end
-
-bindCharacter(waitChar())
-player.CharacterAdded:Connect(bindCharacter)
 
 -- ── GUI ──
-local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+local gui = Instance.new("ScreenGui")
+gui.Name = "FoodCollector"
 gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = player:WaitForChild("PlayerGui")
 
-local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,250,0,150)
-panel.Position = UDim2.new(0.5,-125,0.5,-75)
-panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
+local panel = Instance.new("Frame")
+panel.Size = UDim2.new(0, 270, 0, 215)
+panel.Position = UDim2.new(0.5, -135, 0.5, -107)
+panel.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+panel.BorderSizePixel = 0
 panel.Active = true
 panel.Draggable = true
+panel.Parent = gui
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
+
+local titleBar = Instance.new("Frame", panel)
+titleBar.Size = UDim2.new(1, 0, 0, 38)
+titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 58)
+
+local titleLbl = Instance.new("TextLabel", titleBar)
+titleLbl.Size = UDim2.new(1, -50, 1, 0)
+titleLbl.Position = UDim2.new(0, 12, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "🦖  Food Collector"
+titleLbl.TextColor3 = Color3.fromRGB(230, 230, 255)
 
 local statusLbl = Instance.new("TextLabel", panel)
-statusLbl.Size = UDim2.new(1,0,0,30)
+statusLbl.Size = UDim2.new(1, -20, 0, 22)
+statusLbl.Position = UDim2.new(0, 10, 0, 46)
 statusLbl.BackgroundTransparency = 1
 statusLbl.Text = "Status: Idle"
+
+local speedLbl = Instance.new("TextLabel", panel)
+speedLbl.Position = UDim2.new(0, 10, 0, 94)
+speedLbl.Size = UDim2.new(1, -20, 0, 20)
+speedLbl.BackgroundTransparency = 1
+speedLbl.Text = "Speed: 100 studs/s"
+
+-- ── Slider ──
+local track = Instance.new("Frame", panel)
+track.Size = UDim2.new(1, -20, 0, 8)
+track.Position = UDim2.new(0, 10, 0, 122)
+
+local fill = Instance.new("Frame", track)
+fill.Size = UDim2.new(tweenSpeed / MAX_SPEED, 0, 1, 0)
+
+local knob = Instance.new("TextButton", track)
+knob.Size = UDim2.new(0, 20, 0, 20)
+knob.Position = UDim2.new(tweenSpeed / MAX_SPEED, -10, 0.5, -10)
+
+-- 📱 รองรับมือถือ
+local sliderDragging = false
+
+knob.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1
+    or inp.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(inp)
+    if not sliderDragging then return end
+    if inp.UserInputType ~= Enum.UserInputType.MouseMovement
+    and inp.UserInputType ~= Enum.UserInputType.Touch then return end
+
+    local ratio = math.clamp(
+        (inp.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X,
+        0, 1
+    )
+
+    tweenSpeed = math.max(1, math.floor(ratio * MAX_SPEED))
+
+    fill.Size = UDim2.new(ratio, 0, 1, 0)
+    knob.Position = UDim2.new(ratio, -10, 0.5, -10)
+    speedLbl.Text = "Speed: " .. tweenSpeed .. " studs/s"
+end)
+
+-- ── Buttons ──
+local function makeBtn(text, x)
+    local b = Instance.new("TextButton", panel)
+    b.Size = UDim2.new(0, 112, 0, 36)
+    b.Position = UDim2.new(0, x, 0, 162)
+    b.Text = text
+    return b
+end
+
+local startBtn = makeBtn("Start", 16)
+local stopBtn  = makeBtn("Stop", 142)
 
 local function setStatus(t)
     statusLbl.Text = "Status: "..t
 end
 
-local start = Instance.new("TextButton", panel)
-start.Size = UDim2.new(0.4,0,0,30)
-start.Position = UDim2.new(0.05,0,0.6,0)
-start.Text = "Start"
-
-local stop = Instance.new("TextButton", panel)
-stop.Size = UDim2.new(0.4,0,0,30)
-stop.Position = UDim2.new(0.55,0,0.6,0)
-stop.Text = "Stop"
-
--- ✅ ใช้ Activated (มือถือ/PC)
-start.Activated:Connect(function()
-    if running then return end
-    running = true
-    setStatus("Running")
-
-    task.spawn(function()
-        while running do
-            local food = getClosestFood()
-
-            if food then
-                setStatus("Going "..food.instance.Name)
-                moveTo(food.position)
-            else
-                setStatus("No food")
-                task.wait(0.2)
-            end
+local function loop()
+    while running do
+        local food = getClosestFood()
+        if food then
+            setStatus("Going "..food.instance.Name)
+            moveTo(food.position)
+        else
+            setStatus("No food")
+            task.wait(0.3)
         end
-    end)
-end)
+    end
+end
 
-stop.Activated:Connect(function()
-    running = false
-    stopMover()
-    setStatus("Stopped")
-end)
+startBtn.Activated:Connect(function()
+    if running then return end
