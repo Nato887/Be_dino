@@ -9,6 +9,7 @@ if not player.Character then player.CharacterAdded:Wait() end
 local running   = false
 local tweenSpeed = 100
 local moverConn  = nil
+local AVOID_DISTANCE = 12
 
 -- ── ROOT ─────────────────────────────────────────
 local function getHRP()
@@ -44,7 +45,6 @@ local function getClosestFood()
 end
 
 -- ── PLAYER AVOID ─────────────────────────────────
-local AVOID_DISTANCE = 12
 local function getClosestPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -94,7 +94,6 @@ local function moveTo(targetPos)
         end
 
         local moveDir = direction.Unit
-        -- AVOID PLAYERS
         local threat, threatDist = getClosestPlayer()
         if threat and threatDist < AVOID_DISTANCE then
             local avoid = (hrp.Position - threat.Position)
@@ -103,16 +102,13 @@ local function moveTo(targetPos)
             end
         end
 
-        hrp.CFrame = CFrame.new(hrp.Position + moveDir * math.min(tweenSpeed * dt, dist))
+        local step = math.min(tweenSpeed * 2 * dt, dist) -- ปรับ multiplier 2
+        hrp.CFrame = CFrame.new(hrp.Position + moveDir * step)
     end)
 
-    -- แทนที่ loop blocking ด้วย task.spawn
-    local reachedSignal = Instance.new("BindableEvent")
     task.spawn(function()
         while not reached do task.wait(0.03) end
-        reachedSignal:Fire()
     end)
-    reachedSignal.Event:Wait()
 end
 
 -- ── GUI ─────────────────────────────────────────
@@ -141,7 +137,7 @@ titleBar.BorderSizePixel  = 0
 Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 
 local titleLbl = Instance.new("TextLabel", titleBar)
-titleLbl.Size                   = UDim2.new(1, -50, 1, 0)
+titleLbl.Size                   = UDim2.new(1, -60, 1, 0)
 titleLbl.Position               = UDim2.new(0, 12, 0, 0)
 titleLbl.BackgroundTransparency = 1
 titleLbl.Text                   = "🦖  Food Collector"
@@ -249,16 +245,6 @@ end
 local startBtn = makeBtn("▶ Start", Color3.fromRGB(40, 165, 70), 16)
 local stopBtn  = makeBtn("■ Stop", Color3.fromRGB(185, 50, 50), 142)
 
--- GUI toggle RightCtrl
-local guiVisible = true
-UserInputService.InputBegan:Connect(function(input,gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.RightControl then
-        guiVisible = not guiVisible
-        panel.Visible = guiVisible
-    end
-end)
-
 -- Loop
 local function setStatus(msg, color)
     statusLbl.Text       = "Status: " .. msg
@@ -292,12 +278,12 @@ local function collectLoop()
     setStatus("Stopped")
 end
 
--- Start / Stop / Close
+-- Buttons
 startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
     setStatus("Running", Color3.fromRGB(90, 200, 90))
-    task.spawn(collectLoop) -- ไม่ค้างมือถือ
+    task.spawn(collectLoop)
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
@@ -308,7 +294,6 @@ end)
 
 closeBtn.MouseButton1Click:Connect(function()
     panel.Visible = false
-    guiVisible = false
 end)
 
 setStatus("Idle")
