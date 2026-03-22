@@ -10,7 +10,10 @@ local running    = false
 local tweenSpeed = 100
 local moverConn  = nil
 
--- ── Get the REAL root ──
+local BOOST_MULTIPLIER = 3      -- ⚡ เพิ่มความเร็ววาร์ป
+local AVOID_RADIUS     = 50     -- 🧠 ระยะตรวจจับผู้เล่น
+
+-- ── Root ──
 local function getHRP()
     local char = player.Character
     if not char then return nil end
@@ -22,17 +25,37 @@ local function getHRP()
     return char.PrimaryPart
 end
 
+-- 🧠 เช็คผู้เล่นใกล้ตัว
+local function isPlayerNearby(pos)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local d = (p.Character.HumanoidRootPart.Position - pos).Magnitude
+            if d <= AVOID_RADIUS then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- 🔎 หาอาหาร (ข้ามอันที่มีคนใกล้)
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
+
     local best, bestDist = nil, math.huge
+
     for _, food in CollectionService:GetTagged("Food") do
         if not food or not food.Parent then continue end
+
         local ok, pos = pcall(function()
             if food:IsA("Model") then return food:GetPivot().Position
             elseif food:IsA("BasePart") then return food.Position end
         end)
+
         if ok and pos then
+            if isPlayerNearby(pos) then continue end
+
             local d = (hrp.Position - pos).Magnitude
             if d < bestDist then
                 bestDist = d
@@ -40,6 +63,7 @@ local function getClosestFood()
             end
         end
     end
+
     return best
 end
 
@@ -47,7 +71,7 @@ local function stopMover()
     if moverConn then moverConn:Disconnect(); moverConn = nil end
 end
 
--- 🔥 FIX ค้าง + เสถียรขึ้น
+-- ⚡ วาร์ปเร็ว + กันค้าง + หนีผู้เล่น
 local function moveTo(targetPos)
     local reached = false
     local startTime = tick()
@@ -61,7 +85,8 @@ local function moveTo(targetPos)
             return
         end
 
-        if not targetPos or typeof(targetPos) ~= "Vector3" then
+        -- 🧠 ถ้ามีผู้เล่นใกล้ตัว → ยกเลิกทันที
+        if isPlayerNearby(hrp.Position) then
             reached = true
             stopMover()
             return
@@ -76,62 +101,47 @@ local function moveTo(targetPos)
             return
         end
 
-        if dist ~= dist then
-            reached = true
-            stopMover()
-            return
-        end
+        local speed = tweenSpeed * BOOST_MULTIPLIER
+        local step = math.min(speed * dt, dist)
 
-        local step = math.min(tweenSpeed * dt, dist)
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
 
-        -- ⛔ timeout กันค้าง
+        -- กันค้าง
         if tick() - startTime > 3 then
             reached = true
             stopMover()
-            return
         end
     end)
 
     while not reached do
-        task.wait(0.05)
+        task.wait(0.03)
     end
 end
 
--- ── GUI ──
+-- ── GUI เดิม ──
 local gui = Instance.new("ScreenGui")
-gui.Name = "FoodCollector"
-gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0, 270, 0, 215)
-panel.Position = UDim2.new(0.5, -135, 0.5, -107)
-panel.BackgroundColor3 = Color3.fromRGB(18,18,28)
+panel.Size = UDim2.new(0,270,0,200)
+panel.Position = UDim2.new(0.5,-135,0.5,-100)
+panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
 panel.Active = true
 panel.Draggable = true
-Instance.new("UICorner", panel)
-
-local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1,0,0,30)
-title.Text = "🦖 Food Collector"
-title.BackgroundTransparency = 1
-title.TextColor3 = Color3.fromRGB(255,255,255)
 
 local statusLbl = Instance.new("TextLabel", panel)
-statusLbl.Position = UDim2.new(0,0,0,40)
-statusLbl.Size = UDim2.new(1,0,0,20)
+statusLbl.Size = UDim2.new(1,0,0,30)
 statusLbl.BackgroundTransparency = 1
 statusLbl.Text = "Status: Idle"
 
 local speedLbl = Instance.new("TextLabel", panel)
-speedLbl.Position = UDim2.new(0,0,0,70)
-speedLbl.Size = UDim2.new(1,0,0,20)
+speedLbl.Position = UDim2.new(0,0,0,30)
+speedLbl.Size = UDim2.new(1,0,0,30)
 speedLbl.BackgroundTransparency = 1
 speedLbl.Text = "Speed: 100"
 
 local track = Instance.new("Frame", panel)
-track.Position = UDim2.new(0,10,0,100)
+track.Position = UDim2.new(0,10,0,70)
 track.Size = UDim2.new(1,-20,0,8)
 
 local fill = Instance.new("Frame", track)
@@ -141,18 +151,20 @@ local knob = Instance.new("TextButton", track)
 knob.Size = UDim2.new(0,20,0,20)
 knob.Position = UDim2.new(tweenSpeed/1000,-10,0.5,-10)
 
--- ✅ รองรับมือถือ
+-- 📱 slider มือถือ
 local dragging = false
 knob.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
         dragging = true
     end
 end)
+
 UserInputService.InputEnded:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
         dragging = false
     end
 end)
+
 UserInputService.InputChanged:Connect(function(i)
     if not dragging then return end
     if i.UserInputType ~= Enum.UserInputType.MouseMovement and i.UserInputType ~= Enum.UserInputType.Touch then return end
@@ -172,12 +184,13 @@ end
 local function loop()
     while running do
         local food = getClosestFood()
+
         if food then
             setStatus("Going "..food.instance.Name)
             moveTo(food.position)
         else
-            setStatus("No food")
-            task.wait(0.3)
+            setStatus("Avoiding players...")
+            task.wait(0.2)
         end
     end
 end
