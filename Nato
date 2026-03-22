@@ -26,9 +26,8 @@ end
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
-
     local best, bestDist = nil, math.huge
-    for _, food in CollectionService:GetTagged("Food") do
+    for _, food in ipairs(CollectionService:GetTagged("Food")) do
         if not food or not food.Parent then continue end
         local pos
         if food:IsA("Model") then pos = food:GetPivot().Position
@@ -76,11 +75,9 @@ end
 local function moveTo(targetPos)
     local hrp = getHRP()
     if not hrp or not hrp.Parent then return end
-    local humanoid = hrp.Parent:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
 
-    local reached = false
     stopMover()
+    local reached = false
 
     moverConn = RunService.Heartbeat:Connect(function(dt)
         if not hrp or not hrp.Parent or not running then
@@ -88,7 +85,6 @@ local function moveTo(targetPos)
             stopMover()
             return
         end
-
         local direction = targetPos - hrp.Position
         local dist = direction.Magnitude
         if dist < 2 then
@@ -98,8 +94,7 @@ local function moveTo(targetPos)
         end
 
         local moveDir = direction.Unit
-
-        -- ── AVOID PLAYERS ──
+        -- AVOID PLAYERS
         local threat, threatDist = getClosestPlayer()
         if threat and threatDist < AVOID_DISTANCE then
             local avoid = (hrp.Position - threat.Position)
@@ -108,11 +103,16 @@ local function moveTo(targetPos)
             end
         end
 
-        local nextPos = hrp.Position + moveDir * tweenSpeed * dt
-        humanoid:MoveTo(Vector3.new(nextPos.X, hrp.Position.Y, nextPos.Z))
+        hrp.CFrame = CFrame.new(hrp.Position + moveDir * math.min(tweenSpeed * dt, dist))
     end)
 
-    while not reached do task.wait(0.03) end
+    -- แทนที่ loop blocking ด้วย task.spawn
+    local reachedSignal = Instance.new("BindableEvent")
+    task.spawn(function()
+        while not reached do task.wait(0.03) end
+        reachedSignal:Fire()
+    end)
+    reachedSignal.Event:Wait()
 end
 
 -- ── GUI ─────────────────────────────────────────
@@ -161,7 +161,7 @@ closeBtn.Font             = Enum.Font.GothamBold
 closeBtn.BorderSizePixel  = 0
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
 
--- Status / Speed / Count
+-- Status / Count / Speed
 local statusLbl = Instance.new("TextLabel", panel)
 statusLbl.Size                   = UDim2.new(1, -20, 0, 22)
 statusLbl.Position               = UDim2.new(0, 10, 0, 46)
@@ -246,8 +246,8 @@ local function makeBtn(text, color, xOffset)
     return btn
 end
 
-local startBtn = makeBtn("▶  Start", Color3.fromRGB(40, 165, 70), 16)
-local stopBtn  = makeBtn("■  Stop",  Color3.fromRGB(185, 50, 50), 142)
+local startBtn = makeBtn("▶ Start", Color3.fromRGB(40, 165, 70), 16)
+local stopBtn  = makeBtn("■ Stop", Color3.fromRGB(185, 50, 50), 142)
 
 -- GUI toggle RightCtrl
 local guiVisible = true
@@ -297,7 +297,7 @@ startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
     setStatus("Running", Color3.fromRGB(90, 200, 90))
-    task.spawn(collectLoop) -- <-- Run in separate thread for mobile
+    task.spawn(collectLoop) -- ไม่ค้างมือถือ
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
@@ -307,9 +307,8 @@ stopBtn.MouseButton1Click:Connect(function()
 end)
 
 closeBtn.MouseButton1Click:Connect(function()
-    running = false
-    stopMover()
-    gui:Destroy()
+    panel.Visible = false
+    guiVisible = false
 end)
 
 setStatus("Idle")
