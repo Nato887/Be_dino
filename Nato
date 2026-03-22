@@ -8,7 +8,7 @@ if not player.Character then player.CharacterAdded:Wait() end
 
 local running    = false
 local tweenSpeed = 100
-local MAX_SPEED  = 5000
+local MAX_SPEED  = 10000
 local moverConn  = nil
 
 -- ── Root ──
