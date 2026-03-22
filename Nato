@@ -10,7 +10,7 @@ local running   = false
 local tweenSpeed = 100
 local moverConn  = nil
 
-local MAX_SPEED = 2000 -- 🔥 เพิ่มสปีดสูงสุด
+local MAX_SPEED = 2000
 
 -- ── Get the REAL root ──
 local function getHRP()
@@ -30,7 +30,7 @@ local function getClosestFood()
     local best, bestDist = nil, math.huge
 
     for _, food in CollectionService:GetTagged("Food") do
-        if food and food.Parent then -- 🔧 เอา continue ออก
+        if food and food.Parent then
             local ok, pos = pcall(function()
                 if food:IsA("Model") then return food:GetPivot().Position
                 elseif food:IsA("BasePart") then return food.Position end
@@ -63,8 +63,8 @@ local function moveTo(targetPos)
         local dist = diff.Magnitude
         if dist < 2 then reached = true; stopMover(); return end
 
-        -- 🔥 กันค้างตอนสปีดสูง
-        local step = math.min(tweenSpeed * dt, dist, 50)
+        -- ❌ เอา limit ออกแล้ว (เร็วเต็ม)
+        local step = math.min(tweenSpeed * dt, dist)
 
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
@@ -87,18 +87,6 @@ panel.BorderSizePixel = 0
 panel.Active = true
 panel.Draggable = true
 panel.Parent = gui
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
-
-local titleBar = Instance.new("Frame", panel)
-titleBar.Size = UDim2.new(1, 0, 0, 38)
-titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 58)
-
-local titleLbl = Instance.new("TextLabel", titleBar)
-titleLbl.Size = UDim2.new(1, -50, 1, 0)
-titleLbl.Position = UDim2.new(0, 12, 0, 0)
-titleLbl.BackgroundTransparency = 1
-titleLbl.Text = "🦖  Food Collector"
-titleLbl.TextColor3 = Color3.fromRGB(230, 230, 255)
 
 local statusLbl = Instance.new("TextLabel", panel)
 statusLbl.Size = UDim2.new(1, -20, 0, 22)
@@ -189,3 +177,11 @@ end
 
 startBtn.Activated:Connect(function()
     if running then return end
+    running = true
+    task.spawn(loop)
+end)
+
+stopBtn.Activated:Connect(function()
+    running = false
+    stopMover()
+end)
