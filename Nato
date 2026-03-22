@@ -9,7 +9,7 @@ if not player.Character then player.CharacterAdded:Wait() end
 local running = false
 local moverConn = nil
 local AVOID_DISTANCE = 12
-local guiVisible = true -- สำหรับเปิด/ปิด GUI
+local tweenSpeed = 100
 
 -- ── ROOT ───────────────────────────────
 local function getHRP()
@@ -65,7 +65,6 @@ local function getClosestPlayer()
 end
 
 -- ── MOVE ───────────────────────────────
-local tweenSpeed = 100
 local function stopMover()
     if moverConn then
         moverConn:Disconnect()
@@ -73,27 +72,27 @@ local function stopMover()
     end
 end
 
-local function moveToAsync(targetPos)
+local function moveTo(targetPos)
     stopMover()
-    local hrp = getHRP()
-    if not hrp then return end
-
     moverConn = RunService.Heartbeat:Connect(function(dt)
+        local hrp = getHRP()
         if not hrp or not hrp.Parent or not running then stopMover() return end
 
-        for i = 1, 5 do -- warp 5 ครั้งต่อ frame
-            local dir = targetPos - hrp.Position
-            if dir.Magnitude < 2 then stopMover() return end
-            local moveDir = dir.Unit
-            local threat, threatDist = getClosestPlayer()
-            if threat and threatDist < AVOID_DISTANCE then
-                local avoid = (hrp.Position - threat.Position)
-                if avoid.Magnitude > 0 then
-                    moveDir = (moveDir + avoid.Unit * 2).Unit
-                end
+        local dir = targetPos - hrp.Position
+        if dir.Magnitude < 1 then return end
+        local moveDir = dir.Unit
+
+        -- หลบผู้เล่น
+        local threat, threatDist = getClosestPlayer()
+        if threat and threatDist < AVOID_DISTANCE then
+            local avoid = (hrp.Position - threat.Position)
+            if avoid.Magnitude > 0 then
+                moveDir = (moveDir + avoid.Unit * 2).Unit
             end
-            hrp.CFrame = CFrame.new(hrp.Position + moveDir * math.min(tweenSpeed * dt, dir.Magnitude))
         end
+
+        -- วาร์ปไปหาเป้าหมายโดยตรง (ไม่ตรวจพื้น)
+        hrp.CFrame = CFrame.new(hrp.Position + moveDir * math.min(tweenSpeed * dt, dir.Magnitude))
     end)
 end
 
@@ -128,22 +127,24 @@ titleLbl.TextSize = 15
 titleLbl.Font = Enum.Font.GothamBold
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 
--- ปุ่มเปิด/ปิด GUI (สลับ Visible)
-local toggleBtn = Instance.new("TextButton", titleBar)
-toggleBtn.Size = UDim2.new(0, 30, 0, 30)
-toggleBtn.Position = UDim2.new(1, -40, 0, 4)
-toggleBtn.Text = "👁️"
-toggleBtn.TextSize = 18
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
-toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
-Instance.new("UICorner", toggleBtn)
-toggleBtn.MouseButton1Click:Connect(function()
-    guiVisible = not guiVisible
-    panel.Visible = guiVisible -- สลับโชว์/ซ่อน GUI ได้หลายครั้ง
-end)
+-- ── START / STOP BUTTONS ──────────────
+local function makeBtn(text, color, xOffset)
+    local btn = Instance.new("TextButton", panel)
+    btn.Size = UDim2.new(0, 112, 0, 36)
+    btn.Position = UDim2.new(0, xOffset, 0, 162)
+    btn.BackgroundColor3 = color
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.TextSize = 14
+    btn.Font = Enum.Font.GothamBold
+    btn.BorderSizePixel = 0
+    Instance.new("UICorner", btn)
+    return btn
+end
 
--- ── STATUS ─────────────────────────────
+local startBtn = makeBtn("▶ Start", Color3.fromRGB(40,165,70), 16)
+local stopBtn  = makeBtn("■ Stop", Color3.fromRGB(185,50,50), 142)
+
 local statusLbl = Instance.new("TextLabel", panel)
 statusLbl.Size = UDim2.new(1, -20, 0, 22)
 statusLbl.Position = UDim2.new(0, 10, 0, 46)
@@ -164,52 +165,25 @@ countLbl.TextSize = 12
 countLbl.Font = Enum.Font.Gotham
 countLbl.TextXAlignment = Enum.TextXAlignment.Left
 
-local function makeBtn(text, color, xOffset)
-    local btn = Instance.new("TextButton", panel)
-    btn.Size = UDim2.new(0, 112, 0, 36)
-    btn.Position = UDim2.new(0, xOffset, 0, 162)
-    btn.BackgroundColor3 = color
-    btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255,255,255)
-    btn.TextSize = 14
-    btn.Font = Enum.Font.GothamBold
-    btn.BorderSizePixel = 0
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
-    return btn
-end
-
-local startBtn = makeBtn("▶ Start", Color3.fromRGB(40, 165, 70), 16)
-local stopBtn  = makeBtn("■ Stop", Color3.fromRGB(185, 50, 50), 142)
-
 -- ── LOOP ───────────────────────────────
-local function setStatus(msg, color)
+local function setStatus(msg)
     statusLbl.Text = "Status: "..msg
-    statusLbl.TextColor3 = color or Color3.fromRGB(150,150,180)
 end
 
 local function collectLoop()
     while running do
-        task.wait(0.01)
-        if not player.Character then
-            player.CharacterAdded:Wait()
-            task.wait(1)
-            continue
-        end
         local hrp = getHRP()
-        if not hrp then
-            setStatus("No RootPart...", Color3.fromRGB(200,100,100))
-            task.wait(1)
-            continue
-        end
+        if not hrp then task.wait(0.5); continue end
+
         countLbl.Text = "Food in world: "..#CollectionService:GetTagged("Food")
         local food = getClosestFood()
-        if not food or not food.instance or not food.instance.Parent then
-            setStatus("No food nearby...", Color3.fromRGB(200,180,80))
+        if food and food.instance then
+            setStatus("Going to "..food.instance.Name)
+            moveTo(food.position)
+        else
+            setStatus("No food")
             task.wait(0.3)
-            continue
         end
-        setStatus("Going to "..food.instance.Name, Color3.fromRGB(90,200,90))
-        moveToAsync(food.position)
     end
     setStatus("Stopped")
 end
@@ -217,7 +191,7 @@ end
 startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
-    setStatus("Running", Color3.fromRGB(90,200,90))
+    setStatus("Running")
     task.spawn(collectLoop)
 end)
 
@@ -226,5 +200,3 @@ stopBtn.MouseButton1Click:Connect(function()
     stopMover()
     setStatus("Stopped")
 end)
-
-setStatus("Idle")
