@@ -1,35 +1,75 @@
--- ── Warp moveTo (หลายครั้งต่อเฟรม) ──
+-- ── Services ─────────────────────────────────────────────
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
+local UserInputService  = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+if not player.Character then player.CharacterAdded:Wait() end
+
+local running = false
+local moverConn = nil
+local warpSteps = 20 -- จำนวนครั้งวาร์ปต่อเฟรม
+
+-- ── Get the REAL root (non-massless, direct child of character) ──
+local function getHRP()
+    local char = player.Character
+    if not char then return nil end
+    for _, v in ipairs(char:GetChildren()) do
+        if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
+            return v
+        end
+    end
+    return char.PrimaryPart
+end
+
+-- ── Find closest food ─────────────────────────────────────
+local function getClosestFood()
+    local hrp = getHRP()
+    if not hrp then return nil end
+    local best, bestDist = nil, math.huge
+    for _, food in CollectionService:GetTagged("Food") do
+        if not food or not food.Parent then continue end
+        local ok, pos = pcall(function()
+            if food:IsA("Model") then return food:GetPivot().Position
+            elseif food:IsA("BasePart") then return food.Position end
+        end)
+        if ok and pos then
+            local d = (hrp.Position - pos).Magnitude
+            if d < bestDist then
+                bestDist = d
+                best = { instance = food, position = pos }
+            end
+        end
+    end
+    return best
+end
+
+-- ── Stop mover ──────────────────────────────────────────
+local function stopMover()
+    if moverConn then moverConn:Disconnect(); moverConn = nil end
+end
+
+-- ── Warp movement ───────────────────────────────────────
 local function moveTo(targetPos)
     local reached = false
     stopMover()
-    moverConn = RunService.Heartbeat:Connect(function(dt)
+    moverConn = RunService.Heartbeat:Connect(function()
         local hrp = getHRP()
-        if not hrp or not running then
-            reached = true
-            stopMover()
-            return
-        end
-
+        if not hrp or not running then reached = true; stopMover(); return end
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
-
-        if dist < 2 then
-            reached = true
-            stopMover()
-            return
-        end
-
-        -- วาร์ปหลายครั้งต่อ Heartbeat
-        for i = 1, 10 do
-            local step = diff.Unit * math.min(dist / 10, dist)
+        if dist < 2 then reached = true; stopMover(); return end
+        -- Warp 20 steps per frame
+        local step = diff / warpSteps
+        for i = 1, warpSteps do
             hrp.CFrame = hrp.CFrame + step
         end
     end)
-
     while not reached do task.wait(0.01) end
 end
 
--- ── GUI ──────────────────────────────────────────────────────────
+-- ── GUI ───────────────────────────────────────────────
 local gui = Instance.new("ScreenGui")
 gui.Name           = "FoodCollector"
 gui.ResetOnSpawn   = false
@@ -37,8 +77,8 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent         = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
-panel.Size             = UDim2.new(0, 270, 0, 215)
-panel.Position         = UDim2.new(0.5, -135, 0.5, -107)
+panel.Size             = UDim2.new(0, 270, 0, 190)
+panel.Position         = UDim2.new(0.5, -135, 0.5, -95)
 panel.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
 panel.BorderSizePixel  = 0
 panel.Active           = true
@@ -55,12 +95,6 @@ titleBar.Size             = UDim2.new(1, 0, 0, 38)
 titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 58)
 titleBar.BorderSizePixel  = 0
 Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
-
-local titlePatch = Instance.new("Frame", titleBar)
-titlePatch.Size             = UDim2.new(1, 0, 0, 10)
-titlePatch.Position         = UDim2.new(0, 0, 1, -10)
-titlePatch.BackgroundColor3 = Color3.fromRGB(35, 35, 58)
-titlePatch.BorderSizePixel  = 0
 
 local titleLbl = Instance.new("TextLabel", titleBar)
 titleLbl.Size                   = UDim2.new(1, -50, 1, 0)
@@ -103,11 +137,10 @@ countLbl.TextSize               = 12
 countLbl.Font                   = Enum.Font.Gotham
 countLbl.TextXAlignment         = Enum.TextXAlignment.Left
 
--- ── ปุ่ม Start / Stop / Close ──
 local function makeBtn(text, color, xOffset)
     local btn = Instance.new("TextButton", panel)
     btn.Size             = UDim2.new(0, 112, 0, 36)
-    btn.Position         = UDim2.new(0, xOffset, 0, 162)
+    btn.Position         = UDim2.new(0, xOffset, 0, 142)
     btn.BackgroundColor3 = color
     btn.Text             = text
     btn.TextColor3       = Color3.fromRGB(255, 255, 255)
@@ -120,6 +153,42 @@ end
 
 local startBtn = makeBtn("▶  Start", Color3.fromRGB(40, 165, 70),  16)
 local stopBtn  = makeBtn("■  Stop",  Color3.fromRGB(185, 50, 50), 142)
+
+-- ── Loop ───────────────────────────────────────────────
+local function setStatus(msg, color)
+    statusLbl.Text       = "Status: " .. msg
+    statusLbl.TextColor3 = color or Color3.fromRGB(150, 150, 180)
+end
+
+local function collectLoop()
+    while running do
+        if not player.Character then
+            player.CharacterAdded:Wait()
+            task.wait(1)
+            continue
+        end
+
+        local hrp = getHRP()
+        if not hrp then
+            setStatus("No RootPart...", Color3.fromRGB(200, 100, 100))
+            task.wait(1)
+            continue
+        end
+
+        countLbl.Text = "Food in world: " .. #CollectionService:GetTagged("Food")
+
+        local food = getClosestFood()
+        if not food or not food.instance or not food.instance.Parent then
+            setStatus("No food nearby...", Color3.fromRGB(200, 180, 80))
+            task.wait(0.3)
+            continue
+        end
+
+        setStatus("Going to " .. food.instance.Name, Color3.fromRGB(90, 200, 90))
+        moveTo(food.position)
+    end
+    setStatus("Stopped")
+end
 
 startBtn.MouseButton1Click:Connect(function()
     if running then return end
