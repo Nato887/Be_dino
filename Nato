@@ -8,7 +8,7 @@ if not player.Character then player.CharacterAdded:Wait() end
 
 local running   = false
 local tweenSpeed = 100
-local MAX_SPEED = 2000 -- 🔥 เพิ่มสปีดสูงสุด
+local MAX_SPEED = 5000 -- 🔥 เพิ่มเป็น 5000
 local moverConn  = nil
 
 -- ── Get the REAL root (non-massless, direct child of character) ──
