@@ -216,13 +216,15 @@ Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
 
 local sliderDragging = false
 knob.MouseButton1Down:Connect(function() sliderDragging = true end)
-UserInputService.InputEnded:Connect(function(inp)
-    if inp.UserInputType == Enum.UserInputType.MouseButton1 then sliderDragging = false end
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = false
+    end
 end)
-UserInputService.InputChanged:Connect(function(inp)
+UserInputService.InputChanged:Connect(function(input)
     if not sliderDragging then return end
-    if inp.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-    local ratio  = math.clamp((inp.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+    if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+    local ratio  = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
     tweenSpeed    = math.max(1, math.floor(ratio * 1000))
     fill.Size     = UDim2.new(ratio, 0, 1, 0)
     knob.Position = UDim2.new(ratio, -10, 0.5, -10)
@@ -290,11 +292,12 @@ local function collectLoop()
     setStatus("Stopped")
 end
 
+-- Start / Stop / Close
 startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
     setStatus("Running", Color3.fromRGB(90, 200, 90))
-    task.spawn(collectLoop)
+    task.spawn(collectLoop) -- <-- Run in separate thread for mobile
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
