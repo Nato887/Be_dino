@@ -116,14 +116,57 @@ closeBtn.Font             = Enum.Font.GothamBold
 closeBtn.BorderSizePixel  = 0
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
 
--- 🔥 เพิ่มแค่ตรงนี้ (GUI Toggle) 🔥
-local guiVisible = true
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.RightControl then
-        guiVisible = not guiVisible
-        panel.Visible = guiVisible
-    end
-end)
+local statusLbl = Instance.new("TextLabel", panel)
+statusLbl.Size                   = UDim2.new(1, -20, 0, 22)
+statusLbl.Position               = UDim2.new(0, 10, 0, 46)
+statusLbl.BackgroundTransparency = 1
+statusLbl.Text                   = "Status: Idle"
+statusLbl.TextColor3             = Color3.fromRGB(150, 150, 180)
+statusLbl.TextSize               = 13
+statusLbl.Font                   = Enum.Font.Gotham
+statusLbl.TextXAlignment         = Enum.TextXAlignment.Left
 
--- (ด้านล่างเหมือนเดิมทุกอย่าง)
+local countLbl = Instance.new("TextLabel", panel)
+countLbl.Size                   = UDim2.new(1, -20, 0, 18)
+countLbl.Position               = UDim2.new(0, 10, 0, 68)
+countLbl.BackgroundTransparency = 1
+countLbl.Text                   = "Food in world: 0"
+countLbl.TextColor3             = Color3.fromRGB(120, 120, 160)
+countLbl.TextSize               = 12
+countLbl.Font                   = Enum.Font.Gotham
+countLbl.TextXAlignment         = Enum.TextXAlignment.Left
+
+local speedLbl = Instance.new("TextLabel", panel)
+speedLbl.Size                   = UDim2.new(1, -20, 0, 20)
+speedLbl.Position               = UDim2.new(0, 10, 0, 94)
+speedLbl.BackgroundTransparency = 1
+speedLbl.Text                   = "Speed: 100 studs/s"
+speedLbl.TextColor3             = Color3.fromRGB(150, 150, 180)
+speedLbl.TextSize               = 13
+speedLbl.Font                   = Enum.Font.Gotham
+speedLbl.TextXAlignment         = Enum.TextXAlignment.Left
+
+local track = Instance.new("Frame", panel)
+track.Size             = UDim2.new(1, -20, 0, 8)
+track.Position         = UDim2.new(0, 10, 0, 122)
+track.BackgroundColor3 = Color3.fromRGB(50, 50, 75)
+track.BorderSizePixel  = 0
+Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+
+local fill = Instance.new("Frame", track)
+fill.Size             = UDim2.new(tweenSpeed / 1000, 0, 1, 0)
+fill.BackgroundColor3 = Color3.fromRGB(90, 160, 255)
+fill.BorderSizePixel  = 0
+Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+local knob = Instance.new("TextButton", track)
+knob.Size             = UDim2.new(0, 20, 0, 20)
+knob.Position         = UDim2.new(tweenSpeed / 1000, -10, 0.5, -10)
+knob.BackgroundColor3 = Color3.fromRGB(220, 220, 255)
+knob.Text             = ""
+knob.BorderSizePixel  = 0
+Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+local sliderDragging = false
+knob.MouseButton1Down:Connect(function() sliderDragging = true end)
+UserInputService.InputEnded:Connect(function
