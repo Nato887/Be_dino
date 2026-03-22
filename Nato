@@ -8,9 +8,9 @@ if not player.Character then player.CharacterAdded:Wait() end
 
 local running = false
 local moverConn = nil
-local warpSteps = 20 -- วาร์ป 20 ครั้งต่อเฟรม
-local avoidRadius = 50 -- ระยะตรวจผู้เล่นใกล้เป้าหมาย
-local warpMultiplier = 10 -- ทำให้แต่ละก้าวใหญ่ขึ้น → เร็วขึ้นมาก
+local warpSteps = 10      -- วาร์ป 10 ครั้งต่อเฟรม
+local avoidRadius = 50    -- ระยะตรวจผู้เล่นใกล้เป้าหมาย
+local warpMultiplier = 25 -- ทำให้แต่ละ step ใหญ่ → วาร์ปเร็วมาก
 
 -- ── Get the REAL root ─────────────────────────────────────
 local function getHRP()
@@ -40,8 +40,7 @@ local function getClosestFood()
             local blocked = false
             for _, p in ipairs(Players:GetPlayers()) do
                 if p ~= player and p.Character and p.Character.PrimaryPart then
-                    local d = (pos - p.Character.PrimaryPart.Position).Magnitude
-                    if d < avoidRadius then
+                    if (pos - p.Character.PrimaryPart.Position).Magnitude < avoidRadius then
                         blocked = true
                         break
                     end
@@ -74,7 +73,7 @@ local function moveTo(targetPos)
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
         if dist < 2 then reached = true; stopMover(); return end
-        -- Warp 20 steps per frame แต่แต่ละ step ใหญ่ขึ้นด้วย warpMultiplier
+        -- Warp 10 steps per frame แต่ละ step ใหญ่ด้วย warpMultiplier → เร็วมาก
         local step = (diff / warpSteps) * warpMultiplier
         for i = 1, warpSteps do
             hrp.CFrame = hrp.CFrame + step
