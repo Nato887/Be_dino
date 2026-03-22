@@ -8,8 +8,9 @@ if not player.Character then player.CharacterAdded:Wait() end
 
 local running = false
 local moverConn = nil
-local warpSteps = 40 -- จำนวนครั้งวาร์ปต่อเฟรม
-local avoidRadius = 50 -- ระยะตรวจจับผู้เล่นใกล้เป้าหมาย
+local warpSteps = 20 -- วาร์ป 20 ครั้งต่อเฟรม
+local avoidRadius = 50 -- ระยะตรวจผู้เล่นใกล้เป้าหมาย
+local warpMultiplier = 10 -- ทำให้แต่ละก้าวใหญ่ขึ้น → เร็วขึ้นมาก
 
 -- ── Get the REAL root ─────────────────────────────────────
 local function getHRP()
@@ -73,8 +74,8 @@ local function moveTo(targetPos)
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
         if dist < 2 then reached = true; stopMover(); return end
-        -- Warp 40 steps per frame
-        local step = diff / warpSteps
+        -- Warp 20 steps per frame แต่แต่ละ step ใหญ่ขึ้นด้วย warpMultiplier
+        local step = (diff / warpSteps) * warpMultiplier
         for i = 1, warpSteps do
             hrp.CFrame = hrp.CFrame + step
         end
