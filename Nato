@@ -1,223 +1,130 @@
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
-local CollectionService = game:GetService("CollectionService")
-local UserInputService  = game:GetService("UserInputService")
-
-local player = Players.LocalPlayer
-if not player.Character then player.CharacterAdded:Wait() end
-
-local running = false
-local moverConn = nil
-local AVOID_DISTANCE = 12
-local guiVisible = true -- สำหรับเปิด/ปิด GUI
-
--- ── ROOT ───────────────────────────────
-local function getHRP()
-    local char = player.Character
-    if not char then return nil end
-    for _, v in ipairs(char:GetChildren()) do
-        if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
-            return v
-        end
-    end
-    return char.PrimaryPart
-end
-
--- ── FOOD ───────────────────────────────
-local function getClosestFood()
-    local hrp = getHRP()
-    if not hrp then return nil end
-    local best, bestDist = nil, math.huge
-    for _, food in ipairs(CollectionService:GetTagged("Food")) do
-        if not food or not food.Parent then continue end
-        local pos
-        if food:IsA("Model") then pos = food:GetPivot().Position
-        elseif food:IsA("BasePart") then pos = food.Position end
-        if pos then
-            local dist = (hrp.Position - pos).Magnitude
-            if dist < bestDist then
-                bestDist = dist
-                best = {instance = food, position = pos}
-            end
-        end
-    end
-    return best
-end
-
--- ── PLAYER AVOID ───────────────────────
-local function getClosestPlayer()
-    local hrp = getHRP()
-    if not hrp then return nil end
-    local closest, distMin = nil, math.huge
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character then
-            local root = plr.Character:FindFirstChild("RootPart") or plr.Character:FindFirstChild("HumanoidRootPart")
-            if root then
-                local d = (hrp.Position - root.Position).Magnitude
-                if d < distMin then
-                    distMin = d
-                    closest = root
-                end
-            end
-        end
-    end
-    return closest, distMin
-end
-
--- ── MOVE ───────────────────────────────
-local tweenSpeed = 100
-local function stopMover()
-    if moverConn then
-        moverConn:Disconnect()
-        moverConn = nil
-    end
-end
-
-local function moveToAsync(targetPos)
+-- ── Warp moveTo (หลายครั้งต่อเฟรม) ──
+local function moveTo(targetPos)
+    local reached = false
     stopMover()
-    local hrp = getHRP()
-    if not hrp then return end
-
     moverConn = RunService.Heartbeat:Connect(function(dt)
-        if not hrp or not hrp.Parent or not running then stopMover() return end
+        local hrp = getHRP()
+        if not hrp or not running then
+            reached = true
+            stopMover()
+            return
+        end
 
-        for i = 1, 5 do -- warp 5 ครั้งต่อ frame
-            local dir = targetPos - hrp.Position
-            if dir.Magnitude < 2 then stopMover() return end
-            local moveDir = dir.Unit
-            local threat, threatDist = getClosestPlayer()
-            if threat and threatDist < AVOID_DISTANCE then
-                local avoid = (hrp.Position - threat.Position)
-                if avoid.Magnitude > 0 then
-                    moveDir = (moveDir + avoid.Unit * 2).Unit
-                end
-            end
-            hrp.CFrame = CFrame.new(hrp.Position + moveDir * math.min(tweenSpeed * dt, dir.Magnitude))
+        local diff = targetPos - hrp.Position
+        local dist = diff.Magnitude
+
+        if dist < 2 then
+            reached = true
+            stopMover()
+            return
+        end
+
+        -- วาร์ปหลายครั้งต่อ Heartbeat
+        for i = 1, 10 do
+            local step = diff.Unit * math.min(dist / 10, dist)
+            hrp.CFrame = hrp.CFrame + step
         end
     end)
+
+    while not reached do task.wait(0.01) end
 end
 
--- ── GUI ─────────────────────────────────
+-- ── GUI ──────────────────────────────────────────────────────────
 local gui = Instance.new("ScreenGui")
-gui.Name = "FoodCollector"
-gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.Name           = "FoodCollector"
+gui.ResetOnSpawn   = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent         = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
-panel.Size = UDim2.new(0, 270, 0, 215)
-panel.Position = UDim2.new(0.5, -135, 0.5, -107)
+panel.Size             = UDim2.new(0, 270, 0, 215)
+panel.Position         = UDim2.new(0.5, -135, 0.5, -107)
 panel.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
-panel.Active = true
-panel.Draggable = true
-panel.Parent = gui
-Instance.new("UICorner", panel)
+panel.BorderSizePixel  = 0
+panel.Active           = true
+panel.Draggable        = true
+panel.Parent           = gui
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
+
+local stroke = Instance.new("UIStroke", panel)
+stroke.Color     = Color3.fromRGB(80, 80, 130)
+stroke.Thickness = 1.5
 
 local titleBar = Instance.new("Frame", panel)
-titleBar.Size = UDim2.new(1, 0, 0, 38)
+titleBar.Size             = UDim2.new(1, 0, 0, 38)
 titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 58)
-titleBar.BorderSizePixel = 0
-Instance.new("UICorner", titleBar)
+titleBar.BorderSizePixel  = 0
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
+
+local titlePatch = Instance.new("Frame", titleBar)
+titlePatch.Size             = UDim2.new(1, 0, 0, 10)
+titlePatch.Position         = UDim2.new(0, 0, 1, -10)
+titlePatch.BackgroundColor3 = Color3.fromRGB(35, 35, 58)
+titlePatch.BorderSizePixel  = 0
 
 local titleLbl = Instance.new("TextLabel", titleBar)
-titleLbl.Size = UDim2.new(1, -80, 1, 0)
-titleLbl.Position = UDim2.new(0, 12, 0, 0)
+titleLbl.Size                   = UDim2.new(1, -50, 1, 0)
+titleLbl.Position               = UDim2.new(0, 12, 0, 0)
 titleLbl.BackgroundTransparency = 1
-titleLbl.Text = "🦖 Food Collector"
-titleLbl.TextColor3 = Color3.fromRGB(230, 230, 255)
-titleLbl.TextSize = 15
-titleLbl.Font = Enum.Font.GothamBold
-titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Text                   = "🦖  Food Collector"
+titleLbl.TextColor3             = Color3.fromRGB(230, 230, 255)
+titleLbl.TextSize               = 15
+titleLbl.Font                   = Enum.Font.GothamBold
+titleLbl.TextXAlignment         = Enum.TextXAlignment.Left
 
--- ปุ่มเปิด/ปิด GUI (สลับ Visible)
-local toggleBtn = Instance.new("TextButton", titleBar)
-toggleBtn.Size = UDim2.new(0, 30, 0, 30)
-toggleBtn.Position = UDim2.new(1, -40, 0, 4)
-toggleBtn.Text = "👁️"
-toggleBtn.TextSize = 18
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
-toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
-Instance.new("UICorner", toggleBtn)
-toggleBtn.MouseButton1Click:Connect(function()
-    guiVisible = not guiVisible
-    panel.Visible = guiVisible -- สลับโชว์/ซ่อน GUI ได้หลายครั้ง
-end)
+local closeBtn = Instance.new("TextButton", titleBar)
+closeBtn.Size             = UDim2.new(0, 26, 0, 26)
+closeBtn.Position         = UDim2.new(1, -32, 0.5, -13)
+closeBtn.BackgroundColor3 = Color3.fromRGB(190, 50, 50)
+closeBtn.Text             = "✕"
+closeBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
+closeBtn.TextSize         = 13
+closeBtn.Font             = Enum.Font.GothamBold
+closeBtn.BorderSizePixel  = 0
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
 
--- ── STATUS ─────────────────────────────
 local statusLbl = Instance.new("TextLabel", panel)
-statusLbl.Size = UDim2.new(1, -20, 0, 22)
-statusLbl.Position = UDim2.new(0, 10, 0, 46)
+statusLbl.Size                   = UDim2.new(1, -20, 0, 22)
+statusLbl.Position               = UDim2.new(0, 10, 0, 46)
 statusLbl.BackgroundTransparency = 1
-statusLbl.Text = "Status: Idle"
-statusLbl.TextColor3 = Color3.fromRGB(150, 150, 180)
-statusLbl.TextSize = 13
-statusLbl.Font = Enum.Font.Gotham
-statusLbl.TextXAlignment = Enum.TextXAlignment.Left
+statusLbl.Text                   = "Status: Idle"
+statusLbl.TextColor3             = Color3.fromRGB(150, 150, 180)
+statusLbl.TextSize               = 13
+statusLbl.Font                   = Enum.Font.Gotham
+statusLbl.TextXAlignment         = Enum.TextXAlignment.Left
 
 local countLbl = Instance.new("TextLabel", panel)
-countLbl.Size = UDim2.new(1, -20, 0, 18)
-countLbl.Position = UDim2.new(0, 10, 0, 68)
+countLbl.Size                   = UDim2.new(1, -20, 0, 18)
+countLbl.Position               = UDim2.new(0, 10, 0, 68)
 countLbl.BackgroundTransparency = 1
-countLbl.Text = "Food in world: 0"
-countLbl.TextColor3 = Color3.fromRGB(120, 120, 160)
-countLbl.TextSize = 12
-countLbl.Font = Enum.Font.Gotham
-countLbl.TextXAlignment = Enum.TextXAlignment.Left
+countLbl.Text                   = "Food in world: 0"
+countLbl.TextColor3             = Color3.fromRGB(120, 120, 160)
+countLbl.TextSize               = 12
+countLbl.Font                   = Enum.Font.Gotham
+countLbl.TextXAlignment         = Enum.TextXAlignment.Left
 
+-- ── ปุ่ม Start / Stop / Close ──
 local function makeBtn(text, color, xOffset)
     local btn = Instance.new("TextButton", panel)
-    btn.Size = UDim2.new(0, 112, 0, 36)
-    btn.Position = UDim2.new(0, xOffset, 0, 162)
+    btn.Size             = UDim2.new(0, 112, 0, 36)
+    btn.Position         = UDim2.new(0, xOffset, 0, 162)
     btn.BackgroundColor3 = color
-    btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255,255,255)
-    btn.TextSize = 14
-    btn.Font = Enum.Font.GothamBold
-    btn.BorderSizePixel = 0
+    btn.Text             = text
+    btn.TextColor3       = Color3.fromRGB(255, 255, 255)
+    btn.TextSize         = 14
+    btn.Font             = Enum.Font.GothamBold
+    btn.BorderSizePixel  = 0
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
     return btn
 end
 
-local startBtn = makeBtn("▶ Start", Color3.fromRGB(40, 165, 70), 16)
-local stopBtn  = makeBtn("■ Stop", Color3.fromRGB(185, 50, 50), 142)
-
--- ── LOOP ───────────────────────────────
-local function setStatus(msg, color)
-    statusLbl.Text = "Status: "..msg
-    statusLbl.TextColor3 = color or Color3.fromRGB(150,150,180)
-end
-
-local function collectLoop()
-    while running do
-        task.wait(0.01)
-        if not player.Character then
-            player.CharacterAdded:Wait()
-            task.wait(1)
-            continue
-        end
-        local hrp = getHRP()
-        if not hrp then
-            setStatus("No RootPart...", Color3.fromRGB(200,100,100))
-            task.wait(1)
-            continue
-        end
-        countLbl.Text = "Food in world: "..#CollectionService:GetTagged("Food")
-        local food = getClosestFood()
-        if not food or not food.instance or not food.instance.Parent then
-            setStatus("No food nearby...", Color3.fromRGB(200,180,80))
-            task.wait(0.3)
-            continue
-        end
-        setStatus("Going to "..food.instance.Name, Color3.fromRGB(90,200,90))
-        moveToAsync(food.position)
-    end
-    setStatus("Stopped")
-end
+local startBtn = makeBtn("▶  Start", Color3.fromRGB(40, 165, 70),  16)
+local stopBtn  = makeBtn("■  Stop",  Color3.fromRGB(185, 50, 50), 142)
 
 startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
-    setStatus("Running", Color3.fromRGB(90,200,90))
+    setStatus("Running", Color3.fromRGB(90, 200, 90))
     task.spawn(collectLoop)
 end)
 
@@ -225,6 +132,12 @@ stopBtn.MouseButton1Click:Connect(function()
     running = false
     stopMover()
     setStatus("Stopped")
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    running = false
+    stopMover()
+    gui:Destroy()
 end)
 
 setStatus("Idle")
