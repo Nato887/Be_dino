@@ -1,18 +1,16 @@
--- ── Services ─────────────────────────────────────────────
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
+local UserInputService  = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
-local running = false
-local moverConn = nil
-local warpSteps = 20 -- วาร์ป 20 ครั้งต่อเฟรม
-local avoidRadius = 50 -- ระยะตรวจผู้เล่นใกล้เป้าหมาย
-local warpMultiplier = 10 -- ทำให้แต่ละก้าวใหญ่ขึ้น → เร็วขึ้นมาก
+local running    = false
+local tweenSpeed = 100
+local moverConn  = nil
 
--- ── Get the REAL root ─────────────────────────────────────
+-- ── Get the REAL root (non-massless, direct child of character) ──
 local function getHRP()
     local char = player.Character
     if not char then return nil end
@@ -24,7 +22,6 @@ local function getHRP()
     return char.PrimaryPart
 end
 
--- ── Find closest food with player avoidance ───────────────
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -36,19 +33,6 @@ local function getClosestFood()
             elseif food:IsA("BasePart") then return food.Position end
         end)
         if ok and pos then
-            -- ตรวจผู้เล่นใกล้เป้าหมาย
-            local blocked = false
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= player and p.Character and p.Character.PrimaryPart then
-                    local d = (pos - p.Character.PrimaryPart.Position).Magnitude
-                    if d < avoidRadius then
-                        blocked = true
-                        break
-                    end
-                end
-            end
-            if blocked then continue end
-
             local d = (hrp.Position - pos).Magnitude
             if d < bestDist then
                 bestDist = d
@@ -59,31 +43,26 @@ local function getClosestFood()
     return best
 end
 
--- ── Stop mover ──────────────────────────────────────────
 local function stopMover()
     if moverConn then moverConn:Disconnect(); moverConn = nil end
 end
 
--- ── Warp movement ───────────────────────────────────────
 local function moveTo(targetPos)
     local reached = false
     stopMover()
-    moverConn = RunService.Heartbeat:Connect(function()
+    moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
         if not hrp or not running then reached = true; stopMover(); return end
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
         if dist < 2 then reached = true; stopMover(); return end
-        -- Warp 20 steps per frame แต่แต่ละ step ใหญ่ขึ้นด้วย warpMultiplier
-        local step = (diff / warpSteps) * warpMultiplier
-        for i = 1, warpSteps do
-            hrp.CFrame = hrp.CFrame + step
-        end
+        local step = math.min(tweenSpeed * dt, dist)
+        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
-    while not reached do task.wait(0.01) end
+    while not reached do task.wait(0.05) end
 end
 
--- ── GUI ───────────────────────────────────────────────
+-- ── GUI ──────────────────────────────────────────────────────────
 local gui = Instance.new("ScreenGui")
 gui.Name           = "FoodCollector"
 gui.ResetOnSpawn   = false
@@ -91,8 +70,8 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent         = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
-panel.Size             = UDim2.new(0, 270, 0, 190)
-panel.Position         = UDim2.new(0.5, -135, 0.5, -95)
+panel.Size             = UDim2.new(0, 270, 0, 215)
+panel.Position         = UDim2.new(0.5, -135, 0.5, -107)
 panel.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
 panel.BorderSizePixel  = 0
 panel.Active           = true
@@ -109,6 +88,12 @@ titleBar.Size             = UDim2.new(1, 0, 0, 38)
 titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 58)
 titleBar.BorderSizePixel  = 0
 Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
+
+local titlePatch = Instance.new("Frame", titleBar)
+titlePatch.Size             = UDim2.new(1, 0, 0, 10)
+titlePatch.Position         = UDim2.new(0, 0, 1, -10)
+titlePatch.BackgroundColor3 = Color3.fromRGB(35, 35, 58)
+titlePatch.BorderSizePixel  = 0
 
 local titleLbl = Instance.new("TextLabel", titleBar)
 titleLbl.Size                   = UDim2.new(1, -50, 1, 0)
@@ -151,10 +136,74 @@ countLbl.TextSize               = 12
 countLbl.Font                   = Enum.Font.Gotham
 countLbl.TextXAlignment         = Enum.TextXAlignment.Left
 
+local speedLbl = Instance.new("TextLabel", panel)
+speedLbl.Size                   = UDim2.new(1, -20, 0, 20)
+speedLbl.Position               = UDim2.new(0, 10, 0, 94)
+speedLbl.BackgroundTransparency = 1
+speedLbl.Text                   = "Speed: 100 studs/s"
+speedLbl.TextColor3             = Color3.fromRGB(150, 150, 180)
+speedLbl.TextSize               = 13
+speedLbl.Font                   = Enum.Font.Gotham
+speedLbl.TextXAlignment         = Enum.TextXAlignment.Left
+
+local track = Instance.new("Frame", panel)
+track.Size             = UDim2.new(1, -20, 0, 8)
+track.Position         = UDim2.new(0, 10, 0, 122)
+track.BackgroundColor3 = Color3.fromRGB(50, 50, 75)
+track.BorderSizePixel  = 0
+Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+
+local fill = Instance.new("Frame", track)
+fill.Size             = UDim2.new(tweenSpeed / 1000, 0, 1, 0)
+fill.BackgroundColor3 = Color3.fromRGB(90, 160, 255)
+fill.BorderSizePixel  = 0
+Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+local knob = Instance.new("TextButton", track)
+knob.Size             = UDim2.new(0, 20, 0, 20)
+knob.Position         = UDim2.new(tweenSpeed / 1000, -10, 0.5, -10)
+knob.BackgroundColor3 = Color3.fromRGB(220, 220, 255)
+knob.Text             = ""
+knob.BorderSizePixel  = 0
+Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+-- ── สไลเดอร์รองรับมือถือและคอม ──
+local sliderDragging = false
+
+local function startDrag() sliderDragging = true end
+local function stopDrag() sliderDragging = false end
+
+knob.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or
+       input.UserInputType == Enum.UserInputType.Touch then
+        startDrag()
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or
+       input.UserInputType == Enum.UserInputType.Touch then
+        stopDrag()
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if not sliderDragging then return end
+    if input.UserInputType ~= Enum.UserInputType.MouseMovement and
+       input.UserInputType ~= Enum.UserInputType.Touch then return end
+
+    local ratio = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+    tweenSpeed    = math.max(1, math.floor(ratio * 1000))
+    fill.Size     = UDim2.new(ratio, 0, 1, 0)
+    knob.Position = UDim2.new(ratio, -10, 0.5, -10)
+    speedLbl.Text = "Speed: " .. tweenSpeed .. " studs/s"
+end)
+
+-- ── ปุ่ม Start / Stop ──
 local function makeBtn(text, color, xOffset)
     local btn = Instance.new("TextButton", panel)
     btn.Size             = UDim2.new(0, 112, 0, 36)
-    btn.Position         = UDim2.new(0, xOffset, 0, 142)
+    btn.Position         = UDim2.new(0, xOffset, 0, 162)
     btn.BackgroundColor3 = color
     btn.Text             = text
     btn.TextColor3       = Color3.fromRGB(255, 255, 255)
@@ -165,10 +214,10 @@ local function makeBtn(text, color, xOffset)
     return btn
 end
 
-local startBtn = makeBtn("▶  Start", Color3.fromRGB(40, 165, 70),  16)
+local startBtn = makeBtn("▶  Start", Color3.fromRGB(40, 165, 70), 16)
 local stopBtn  = makeBtn("■  Stop",  Color3.fromRGB(185, 50, 50), 142)
 
--- ── Loop ───────────────────────────────────────────────
+-- ── Loop ─────────────────────────────────────────────────────────
 local function setStatus(msg, color)
     statusLbl.Text       = "Status: " .. msg
     statusLbl.TextColor3 = color or Color3.fromRGB(150, 150, 180)
