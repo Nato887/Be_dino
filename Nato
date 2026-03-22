@@ -1,7 +1,6 @@
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
-local UserInputService  = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
@@ -72,42 +71,38 @@ local function stopMover()
     end
 end
 
+-- วาร์ปหลายครั้งต่อ Heartbeat
 local function moveTo(targetPos)
     local hrp = getHRP()
     if not hrp or not hrp.Parent then return end
-
     stopMover()
-    local reached = false
 
     moverConn = RunService.Heartbeat:Connect(function(dt)
         if not hrp or not hrp.Parent or not running then
-            reached = true
-            stopMover()
-            return
-        end
-        local direction = targetPos - hrp.Position
-        local dist = direction.Magnitude
-        if dist < 2 then
-            reached = true
             stopMover()
             return
         end
 
-        local moveDir = direction.Unit
-        local threat, threatDist = getClosestPlayer()
-        if threat and threatDist < AVOID_DISTANCE then
-            local avoid = (hrp.Position - threat.Position)
-            if avoid.Magnitude > 0 then
-                moveDir = (moveDir + avoid.Unit * 2).Unit
+        for i = 1, 5 do -- วาร์ป 5 ครั้งต่อ Heartbeat
+            local direction = targetPos - hrp.Position
+            local dist = direction.Magnitude
+            if dist < 2 then
+                stopMover()
+                return
             end
+
+            local moveDir = direction.Unit
+            local threat, threatDist = getClosestPlayer()
+            if threat and threatDist < AVOID_DISTANCE then
+                local avoid = (hrp.Position - threat.Position)
+                if avoid.Magnitude > 0 then
+                    moveDir = (moveDir + avoid.Unit * 2).Unit
+                end
+            end
+
+            local step = math.min(tweenSpeed * dt, dist)
+            hrp.CFrame = CFrame.new(hrp.Position + moveDir * step)
         end
-
-        local step = math.min(tweenSpeed * 2 * dt, dist) -- ปรับ multiplier 2
-        hrp.CFrame = CFrame.new(hrp.Position + moveDir * step)
-    end)
-
-    task.spawn(function()
-        while not reached do task.wait(0.03) end
     end)
 end
 
@@ -125,11 +120,9 @@ panel.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
 panel.BorderSizePixel  = 0
 panel.Active           = true
 panel.Draggable        = true
-panel.Visible          = true
 panel.Parent           = gui
 Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
 
--- Title bar
 local titleBar = Instance.new("Frame", panel)
 titleBar.Size             = UDim2.new(1, 0, 0, 38)
 titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 58)
@@ -137,7 +130,7 @@ titleBar.BorderSizePixel  = 0
 Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 
 local titleLbl = Instance.new("TextLabel", titleBar)
-titleLbl.Size                   = UDim2.new(1, -60, 1, 0)
+titleLbl.Size                   = UDim2.new(1, -50, 1, 0)
 titleLbl.Position               = UDim2.new(0, 12, 0, 0)
 titleLbl.BackgroundTransparency = 1
 titleLbl.Text                   = "🦖  Food Collector"
@@ -146,18 +139,6 @@ titleLbl.TextSize               = 15
 titleLbl.Font                   = Enum.Font.GothamBold
 titleLbl.TextXAlignment         = Enum.TextXAlignment.Left
 
-local closeBtn = Instance.new("TextButton", titleBar)
-closeBtn.Size             = UDim2.new(0, 26, 0, 26)
-closeBtn.Position         = UDim2.new(1, -32, 0.5, -13)
-closeBtn.BackgroundColor3 = Color3.fromRGB(190, 50, 50)
-closeBtn.Text             = "✕"
-closeBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
-closeBtn.TextSize         = 13
-closeBtn.Font             = Enum.Font.GothamBold
-closeBtn.BorderSizePixel  = 0
-Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
-
--- Status / Count / Speed
 local statusLbl = Instance.new("TextLabel", panel)
 statusLbl.Size                   = UDim2.new(1, -20, 0, 22)
 statusLbl.Position               = UDim2.new(0, 10, 0, 46)
@@ -177,55 +158,6 @@ countLbl.TextColor3             = Color3.fromRGB(120, 120, 160)
 countLbl.TextSize               = 12
 countLbl.Font                   = Enum.Font.Gotham
 countLbl.TextXAlignment         = Enum.TextXAlignment.Left
-
-local speedLbl = Instance.new("TextLabel", panel)
-speedLbl.Size                   = UDim2.new(1, -20, 0, 20)
-speedLbl.Position               = UDim2.new(0, 10, 0, 94)
-speedLbl.BackgroundTransparency = 1
-speedLbl.Text                   = "Speed: 100 studs/s"
-speedLbl.TextColor3             = Color3.fromRGB(150, 150, 180)
-speedLbl.TextSize               = 13
-speedLbl.Font                   = Enum.Font.Gotham
-speedLbl.TextXAlignment         = Enum.TextXAlignment.Left
-
--- Slider
-local track = Instance.new("Frame", panel)
-track.Size             = UDim2.new(1, -20, 0, 8)
-track.Position         = UDim2.new(0, 10, 0, 122)
-track.BackgroundColor3 = Color3.fromRGB(50, 50, 75)
-track.BorderSizePixel  = 0
-Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
-
-local fill = Instance.new("Frame", track)
-fill.Size             = UDim2.new(tweenSpeed / 1000, 0, 1, 0)
-fill.BackgroundColor3 = Color3.fromRGB(90, 160, 255)
-fill.BorderSizePixel  = 0
-Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-
-local knob = Instance.new("TextButton", track)
-knob.Size             = UDim2.new(0, 20, 0, 20)
-knob.Position         = UDim2.new(tweenSpeed / 1000, -10, 0.5, -10)
-knob.BackgroundColor3 = Color3.fromRGB(220, 220, 255)
-knob.Text             = ""
-knob.BorderSizePixel  = 0
-Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-
-local sliderDragging = false
-knob.MouseButton1Down:Connect(function() sliderDragging = true end)
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        sliderDragging = false
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if not sliderDragging then return end
-    if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
-    local ratio  = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-    tweenSpeed    = math.max(1, math.floor(ratio * 1000))
-    fill.Size     = UDim2.new(ratio, 0, 1, 0)
-    knob.Position = UDim2.new(ratio, -10, 0.5, -10)
-    speedLbl.Text = "Speed: " .. tweenSpeed .. " studs/s"
-end)
 
 -- Buttons
 local function makeBtn(text, color, xOffset)
@@ -272,6 +204,7 @@ local function collectLoop()
             task.wait(0.3)
             continue
         end
+
         setStatus("Going to " .. food.instance.Name, Color3.fromRGB(90, 200, 90))
         moveTo(food.position)
     end
@@ -290,10 +223,6 @@ stopBtn.MouseButton1Click:Connect(function()
     running = false
     stopMover()
     setStatus("Stopped")
-end)
-
-closeBtn.MouseButton1Click:Connect(function()
-    panel.Visible = false
 end)
 
 setStatus("Idle")
