@@ -9,6 +9,8 @@ if not player.Character then player.CharacterAdded:Wait() end
 local running    = false
 local tweenSpeed = 100
 local moverConn  = nil
+local SPEED_LIMIT = 2000
+local AVOID_RADIUS = 75
 
 -- ── Get the REAL root (non-massless, direct child of character) ──
 local function getHRP()
@@ -22,6 +24,7 @@ local function getHRP()
     return char.PrimaryPart
 end
 
+-- ── Get closest food but avoid players near it ──
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -32,12 +35,27 @@ local function getClosestFood()
             if food:IsA("Model") then return food:GetPivot().Position
             elseif food:IsA("BasePart") then return food.Position end
         end)
-        if ok and pos then
-            local d = (hrp.Position - pos).Magnitude
-            if d < bestDist then
-                bestDist = d
-                best = { instance = food, position = pos }
+        if not ok or not pos then continue end
+
+        -- เช็คผู้เล่นใกล้เป้าหมาย
+        local playerNearby = false
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p == player then continue end
+            if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local d = (p.Character.HumanoidRootPart.Position - pos).Magnitude
+                if d <= AVOID_RADIUS then
+                    playerNearby = true
+                    break
+                end
             end
+        end
+        if playerNearby then continue end
+
+        -- เลือกอาหารที่ใกล้ที่สุด
+        local d = (hrp.Position - pos).Magnitude
+        if d < bestDist then
+            bestDist = d
+            best = { instance = food, position = pos }
         end
     end
     return best
@@ -56,7 +74,7 @@ local function moveTo(targetPos)
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
         if dist < 2 then reached = true; stopMover(); return end
-        local step = math.min(tweenSpeed * dt, dist)
+        local step = math.min(math.min(tweenSpeed, SPEED_LIMIT) * dt, dist)
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
     while not reached do task.wait(0.05) end
@@ -154,22 +172,21 @@ track.BorderSizePixel  = 0
 Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
 
 local fill = Instance.new("Frame", track)
-fill.Size             = UDim2.new(tweenSpeed / 1000, 0, 1, 0)
+fill.Size             = UDim2.new(tweenSpeed / SPEED_LIMIT, 0, 1, 0)
 fill.BackgroundColor3 = Color3.fromRGB(90, 160, 255)
 fill.BorderSizePixel  = 0
 Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
 
 local knob = Instance.new("TextButton", track)
 knob.Size             = UDim2.new(0, 20, 0, 20)
-knob.Position         = UDim2.new(tweenSpeed / 1000, -10, 0.5, -10)
+knob.Position         = UDim2.new(tweenSpeed / SPEED_LIMIT, -10, 0.5, -10)
 knob.BackgroundColor3 = Color3.fromRGB(220, 220, 255)
 knob.Text             = ""
 knob.BorderSizePixel  = 0
 Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
 
--- ── สไลเดอร์รองรับมือถือและคอม ──
+-- ── Slider มือถือและ PC ──
 local sliderDragging = false
-
 local function startDrag() sliderDragging = true end
 local function stopDrag() sliderDragging = false end
 
@@ -179,21 +196,18 @@ knob.InputBegan:Connect(function(input)
         startDrag()
     end
 end)
-
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or
        input.UserInputType == Enum.UserInputType.Touch then
         stopDrag()
     end
 end)
-
 UserInputService.InputChanged:Connect(function(input)
     if not sliderDragging then return end
     if input.UserInputType ~= Enum.UserInputType.MouseMovement and
        input.UserInputType ~= Enum.UserInputType.Touch then return end
-
     local ratio = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-    tweenSpeed    = math.max(1, math.floor(ratio * 1000))
+    tweenSpeed    = math.max(1, math.floor(ratio * SPEED_LIMIT))
     fill.Size     = UDim2.new(ratio, 0, 1, 0)
     knob.Position = UDim2.new(ratio, -10, 0.5, -10)
     speedLbl.Text = "Speed: " .. tweenSpeed .. " studs/s"
