@@ -25,7 +25,7 @@ local function getHRP()
     return char.PrimaryPart
 end
 
--- 🧠 เช็คผู้เล่นใกล้ตำแหน่ง
+-- 🧠 เช็คผู้เล่นใกล้
 local function isPlayerNear(pos)
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
@@ -76,6 +76,7 @@ local function moveTo(targetPos)
     local startTime = tick()
 
     stopMover()
+
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
         if not hrp or not running then
@@ -84,7 +85,7 @@ local function moveTo(targetPos)
             return
         end
 
-        -- 🚫 ถ้ามีคนเข้าใกล้เป้าหมาย → ยกเลิก
+        -- 🧠 เช็คก่อนขยับ (กันจังหวะสุดท้าย)
         if isPlayerNear(targetPos) then
             reached = true
             stopMover()
@@ -95,6 +96,13 @@ local function moveTo(targetPos)
         local dist = diff.Magnitude
 
         if dist < 2 then
+            reached = true
+            stopMover()
+            return
+        end
+
+        -- 🧠 เช็คซ้ำก่อนวาร์ปจริง
+        if isPlayerNear(targetPos) then
             reached = true
             stopMover()
             return
@@ -115,8 +123,28 @@ local function moveTo(targetPos)
     end
 end
 
+-- 💀 ตายแล้วหยุดทันที
+local function bindCharacter(char)
+    local hum = char:WaitForChild("Humanoid")
+
+    hum.Died:Connect(function()
+        running = false
+        stopMover()
+    end)
+end
+
+if player.Character then
+    bindCharacter(player.Character)
+end
+
+player.CharacterAdded:Connect(function(char)
+    bindCharacter(char)
+end)
+
 -- ── GUI ──
 local gui = Instance.new("ScreenGui")
+gui.Name = "FoodCollector"
+gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame", gui)
@@ -148,7 +176,7 @@ local knob = Instance.new("TextButton", track)
 knob.Size = UDim2.new(0,20,0,20)
 knob.Position = UDim2.new(tweenSpeed/1000,-10,0.5,-10)
 
--- 📱 Slider มือถือ/PC
+-- 📱 Slider
 local dragging = false
 knob.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
