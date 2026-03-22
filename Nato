@@ -80,12 +80,16 @@ local function stopMover()
 end
 
 local function moveTo(targetPos)
+    local hrp = getHRP()
+    if not hrp or not hrp.Parent then return end
+    local humanoid = hrp.Parent:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
     local reached = false
     stopMover()
 
     moverConn = RunService.Heartbeat:Connect(function(dt)
-        local hrp = getHRP()
-        if not hrp or not running then
+        if not hrp or not hrp.Parent or not running then
             reached = true
             stopMover()
             return
@@ -93,7 +97,6 @@ local function moveTo(targetPos)
 
         local direction = targetPos - hrp.Position
         local dist = direction.Magnitude
-
         if dist < 2 then
             reached = true
             stopMover()
@@ -111,14 +114,11 @@ local function moveTo(targetPos)
             end
         end
 
-        hrp.CFrame = CFrame.new(
-            hrp.Position + moveDir * math.min(tweenSpeed * dt, dist)
-        )
+        local nextPos = hrp.Position + moveDir * tweenSpeed * dt
+        humanoid:MoveTo(Vector3.new(nextPos.X, hrp.Position.Y, nextPos.Z))
     end)
 
-    while not reached do
-        task.wait(0.03)
-    end
+    while not reached do task.wait(0.03) end
 end
 
 -- ── GUI ─────────────────────────────────────────
@@ -131,6 +131,7 @@ panel.Position = UDim2.new(0.5,-135,0.5,-107)
 panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
 panel.Active = true
 panel.Draggable = true
+panel.Visible = true
 panel.Parent = gui
 Instance.new("UICorner", panel)
 
