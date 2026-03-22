@@ -1,6 +1,7 @@
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
+local UserInputService  = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
@@ -71,25 +72,18 @@ local function stopMover()
     end
 end
 
--- วาร์ปหลายครั้งต่อ Heartbeat
 local function moveTo(targetPos)
-    local hrp = getHRP()
-    if not hrp or not hrp.Parent then return end
     stopMover()
+    local hrp = getHRP()
+    if not hrp then return end
 
     moverConn = RunService.Heartbeat:Connect(function(dt)
-        if not hrp or not hrp.Parent or not running then
-            stopMover()
-            return
-        end
+        if not hrp or not hrp.Parent or not running then stopMover() return end
 
-        for i = 1, 5 do -- วาร์ป 5 ครั้งต่อ Heartbeat
+        for i = 1, 5 do
             local direction = targetPos - hrp.Position
             local dist = direction.Magnitude
-            if dist < 2 then
-                stopMover()
-                return
-            end
+            if dist < 2 then stopMover() return end
 
             local moveDir = direction.Unit
             local threat, threatDist = getClosestPlayer()
@@ -100,8 +94,7 @@ local function moveTo(targetPos)
                 end
             end
 
-            local step = math.min(tweenSpeed * dt, dist)
-            hrp.CFrame = CFrame.new(hrp.Position + moveDir * step)
+            hrp.CFrame = CFrame.new(hrp.Position + moveDir * math.min(tweenSpeed * dt, dist))
         end
     end)
 end
@@ -133,11 +126,22 @@ local titleLbl = Instance.new("TextLabel", titleBar)
 titleLbl.Size                   = UDim2.new(1, -50, 1, 0)
 titleLbl.Position               = UDim2.new(0, 12, 0, 0)
 titleLbl.BackgroundTransparency = 1
-titleLbl.Text                   = "🦖  Food Collector"
+titleLbl.Text                   = "🦖 Food Collector"
 titleLbl.TextColor3             = Color3.fromRGB(230, 230, 255)
 titleLbl.TextSize               = 15
 titleLbl.Font                   = Enum.Font.GothamBold
 titleLbl.TextXAlignment         = Enum.TextXAlignment.Left
+
+local toggleBtn = Instance.new("TextButton", titleBar)
+toggleBtn.Size             = UDim2.new(0, 26, 0, 26)
+toggleBtn.Position         = UDim2.new(1, -32, 0.5, -13)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 165, 50)
+toggleBtn.Text             = "⇅"
+toggleBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextSize         = 13
+toggleBtn.Font             = Enum.Font.GothamBold
+toggleBtn.BorderSizePixel  = 0
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
 
 local statusLbl = Instance.new("TextLabel", panel)
 statusLbl.Size                   = UDim2.new(1, -20, 0, 22)
@@ -159,7 +163,6 @@ countLbl.TextSize               = 12
 countLbl.Font                   = Enum.Font.Gotham
 countLbl.TextXAlignment         = Enum.TextXAlignment.Left
 
--- Buttons
 local function makeBtn(text, color, xOffset)
     local btn = Instance.new("TextButton", panel)
     btn.Size             = UDim2.new(0, 112, 0, 36)
@@ -177,6 +180,13 @@ end
 local startBtn = makeBtn("▶ Start", Color3.fromRGB(40, 165, 70), 16)
 local stopBtn  = makeBtn("■ Stop", Color3.fromRGB(185, 50, 50), 142)
 
+-- Toggle GUI
+local guiVisible = true
+toggleBtn.MouseButton1Click:Connect(function()
+    guiVisible = not guiVisible
+    panel.Visible = guiVisible
+end)
+
 -- Loop
 local function setStatus(msg, color)
     statusLbl.Text       = "Status: " .. msg
@@ -185,11 +195,14 @@ end
 
 local function collectLoop()
     while running do
+        task.wait(0.01) -- async ไม่บล็อก GUI
+
         if not player.Character then
             player.CharacterAdded:Wait()
             task.wait(1)
             continue
         end
+
         local hrp = getHRP()
         if not hrp then
             setStatus("No RootPart...", Color3.fromRGB(200, 100, 100))
@@ -211,7 +224,6 @@ local function collectLoop()
     setStatus("Stopped")
 end
 
--- Buttons
 startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
