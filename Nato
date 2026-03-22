@@ -9,7 +9,7 @@ if not player.Character then player.CharacterAdded:Wait() end
 local running = false
 local moverConn = nil
 local AVOID_DISTANCE = 12
-local guiVisible = true -- สำหรับปุ่มเปิด/ปิด GUI
+local guiVisible = true -- สำหรับเปิด/ปิด GUI
 
 -- ── ROOT ───────────────────────────────
 local function getHRP()
@@ -128,7 +128,7 @@ titleLbl.TextSize = 15
 titleLbl.Font = Enum.Font.GothamBold
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 
--- ปุ่มเปิด/ปิด GUI
+-- ปุ่มเปิด/ปิด GUI (สลับ Visible)
 local toggleBtn = Instance.new("TextButton", titleBar)
 toggleBtn.Size = UDim2.new(0, 30, 0, 30)
 toggleBtn.Position = UDim2.new(1, -40, 0, 4)
@@ -140,7 +140,7 @@ toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
 Instance.new("UICorner", toggleBtn)
 toggleBtn.MouseButton1Click:Connect(function()
     guiVisible = not guiVisible
-    panel.Visible = guiVisible
+    panel.Visible = guiVisible -- สลับโชว์/ซ่อน GUI ได้หลายครั้ง
 end)
 
 -- ── STATUS ─────────────────────────────
@@ -184,7 +184,7 @@ local stopBtn  = makeBtn("■ Stop", Color3.fromRGB(185, 50, 50), 142)
 -- ── LOOP ───────────────────────────────
 local function setStatus(msg, color)
     statusLbl.Text = "Status: "..msg
-    statusLbl.TextColor3 = color or Color3.fromRGB(150, 150, 180)
+    statusLbl.TextColor3 = color or Color3.fromRGB(150,150,180)
 end
 
 local function collectLoop()
@@ -197,7 +197,7 @@ local function collectLoop()
         end
         local hrp = getHRP()
         if not hrp then
-            setStatus("No RootPart...", Color3.fromRGB(200, 100, 100))
+            setStatus("No RootPart...", Color3.fromRGB(200,100,100))
             task.wait(1)
             continue
         end
