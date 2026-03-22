@@ -2,14 +2,22 @@ local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService  = game:GetService("UserInputService")
+local VirtualUser       = game:GetService("VirtualUser") -- 🔥 Anti AFK
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
 local running    = false
 local tweenSpeed = 100
-local MAX_SPEED  = 10000
+local MAX_SPEED  = 10000 -- 🔥 เพิ่มเป็น 10000
 local moverConn  = nil
+
+-- 🔥 Anti AFK
+player.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
 
 -- ── Root ──
 local function getHRP()
@@ -61,7 +69,7 @@ local function stopMover()
     end
 end
 
--- ── move (แก้ค้างแล้ว) ──
+-- ── move ──
 local function moveTo(targetPos)
     local reached = false
     local startTime = tick()
@@ -86,7 +94,6 @@ local function moveTo(targetPos)
             return
         end
 
-        -- กันค้าง
         if tick() - startTime > 5 then
             reached = true
             stopMover()
@@ -115,7 +122,6 @@ panel.BackgroundColor3 = Color3.fromRGB(18,18,28)
 panel.Active = true
 panel.Draggable = true
 
--- status
 local statusLbl = Instance.new("TextLabel", panel)
 statusLbl.Position = UDim2.new(0,10,0,46)
 statusLbl.Size = UDim2.new(1,-20,0,22)
@@ -123,14 +129,12 @@ statusLbl.BackgroundTransparency = 1
 statusLbl.Text = "Status: Idle"
 statusLbl.TextColor3 = Color3.fromRGB(150,150,180)
 
--- speed label
 local speedLbl = Instance.new("TextLabel", panel)
 speedLbl.Position = UDim2.new(0,10,0,94)
 speedLbl.Size = UDim2.new(1,-20,0,20)
 speedLbl.BackgroundTransparency = 1
 speedLbl.Text = "Speed: 100 studs/s"
 
--- setStatus (สำคัญ!)
 local function setStatus(msg, color)
     statusLbl.Text = "Status: "..msg
     statusLbl.TextColor3 = color or Color3.fromRGB(150,150,180)
@@ -178,7 +182,7 @@ UserInputService.InputChanged:Connect(function(i)
     speedLbl.Text = "Speed: "..tweenSpeed.." studs/s"
 end)
 
--- ปุ่ม
+-- buttons
 local function makeBtn(text,x)
     local b = Instance.new("TextButton", panel)
     b.Size = UDim2.new(0,112,0,36)
@@ -208,7 +212,6 @@ local function loop()
     setStatus("Stopped")
 end
 
--- start
 startBtn.Activated:Connect(function()
     if running then return end
     running = true
@@ -216,12 +219,10 @@ startBtn.Activated:Connect(function()
     task.spawn(loop)
 end)
 
--- stop
 stopBtn.Activated:Connect(function()
     running = false
     stopMover()
     setStatus("Stopped")
 end)
 
--- ค่าเริ่มต้น
 setStatus("Idle")
