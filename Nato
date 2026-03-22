@@ -10,8 +10,8 @@ local running    = false
 local tweenSpeed = 100
 local moverConn  = nil
 
-local BOOST_MULTIPLIER = 3      -- ⚡ เพิ่มความเร็ววาร์ป
-local AVOID_RADIUS     = 50     -- 🧠 ระยะตรวจจับผู้เล่น
+local BOOST = 3
+local AVOID_RADIUS = 75
 
 -- ── Root ──
 local function getHRP()
@@ -25,12 +25,11 @@ local function getHRP()
     return char.PrimaryPart
 end
 
--- 🧠 เช็คผู้เล่นใกล้ตัว
-local function isPlayerNearby(pos)
+-- 🧠 เช็คผู้เล่นใกล้ตำแหน่ง
+local function isPlayerNear(pos)
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local d = (p.Character.HumanoidRootPart.Position - pos).Magnitude
-            if d <= AVOID_RADIUS then
+            if (p.Character.HumanoidRootPart.Position - pos).Magnitude <= AVOID_RADIUS then
                 return true
             end
         end
@@ -38,7 +37,7 @@ local function isPlayerNearby(pos)
     return false
 end
 
--- 🔎 หาอาหาร (ข้ามอันที่มีคนใกล้)
+-- 🔎 หาอาหารแบบปลอดภัย
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -54,7 +53,7 @@ local function getClosestFood()
         end)
 
         if ok and pos then
-            if isPlayerNearby(pos) then continue end
+            if isPlayerNear(pos) then continue end
 
             local d = (hrp.Position - pos).Magnitude
             if d < bestDist then
@@ -71,7 +70,7 @@ local function stopMover()
     if moverConn then moverConn:Disconnect(); moverConn = nil end
 end
 
--- ⚡ วาร์ปเร็ว + กันค้าง + หนีผู้เล่น
+-- ⚡ วาร์ปเร็ว + กันตาย + กันค้าง
 local function moveTo(targetPos)
     local reached = false
     local startTime = tick()
@@ -85,8 +84,8 @@ local function moveTo(targetPos)
             return
         end
 
-        -- 🧠 ถ้ามีผู้เล่นใกล้ตัว → ยกเลิกทันที
-        if isPlayerNearby(hrp.Position) then
+        -- 🚫 ถ้ามีคนเข้าใกล้เป้าหมาย → ยกเลิก
+        if isPlayerNear(targetPos) then
             reached = true
             stopMover()
             return
@@ -101,9 +100,7 @@ local function moveTo(targetPos)
             return
         end
 
-        local speed = tweenSpeed * BOOST_MULTIPLIER
-        local step = math.min(speed * dt, dist)
-
+        local step = math.min((tweenSpeed * BOOST) * dt, dist)
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
 
         -- กันค้าง
@@ -118,7 +115,7 @@ local function moveTo(targetPos)
     end
 end
 
--- ── GUI เดิม ──
+-- ── GUI ──
 local gui = Instance.new("ScreenGui")
 gui.Parent = player:WaitForChild("PlayerGui")
 
@@ -151,7 +148,7 @@ local knob = Instance.new("TextButton", track)
 knob.Size = UDim2.new(0,20,0,20)
 knob.Position = UDim2.new(tweenSpeed/1000,-10,0.5,-10)
 
--- 📱 slider มือถือ
+-- 📱 Slider มือถือ/PC
 local dragging = false
 knob.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
