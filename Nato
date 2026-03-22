@@ -9,8 +9,7 @@ if not player.Character then player.CharacterAdded:Wait() end
 local running = false
 local moverConn = nil
 local warpSteps = 10      -- วาร์ป 10 ครั้งต่อเฟรม
-local avoidRadius = 50    -- ระยะตรวจผู้เล่นใกล้เป้าหมายเมื่อเลือกอาหาร
-local dangerRadius = 75   -- ระยะตรวจผู้เล่นขณะวาร์ป → เปลี่ยนเป้าหมายทันที
+local avoidRadius = 50    -- ระยะตรวจผู้เล่นใกล้เป้าหมาย
 local warpMultiplier = 25 -- ทำให้แต่ละ step ใหญ่ → วาร์ปเร็วมาก
 
 -- ── Get the REAL root ─────────────────────────────────────
@@ -37,7 +36,7 @@ local function getClosestFood()
             elseif food:IsA("BasePart") then return food.Position end
         end)
         if ok and pos then
-            -- ตรวจผู้เล่นใกล้เป้าหมาย < avoidRadius
+            -- ตรวจผู้เล่นใกล้เป้าหมาย
             local blocked = false
             for _, p in ipairs(Players:GetPlayers()) do
                 if p ~= player and p.Character and p.Character.PrimaryPart then
@@ -64,44 +63,17 @@ local function stopMover()
     if moverConn then moverConn:Disconnect(); moverConn = nil end
 end
 
--- ── Warp movement with danger detection ─────────────────
-local function moveTo(targetFood)
+-- ── Warp movement ───────────────────────────────────────
+local function moveTo(targetPos)
     local reached = false
     stopMover()
     moverConn = RunService.Heartbeat:Connect(function()
         local hrp = getHRP()
         if not hrp or not running then reached = true; stopMover(); return end
-        if not targetFood or not targetFood.instance or not targetFood.instance.Parent then
-            reached = true; stopMover(); return
-        end
-
-        local targetPos
-        local ok, pos = pcall(function()
-            if targetFood.instance:IsA("Model") then return targetFood.instance:GetPivot().Position
-            elseif targetFood.instance:IsA("BasePart") then return targetFood.instance.Position end
-        end)
-        if ok and pos then targetPos = pos else reached = true; stopMover(); return end
-
-        -- ตรวจผู้เล่นใกล้เป้าหมาย < dangerRadius → เลือกอาหารอื่นทันที
-        local danger = false
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= player and p.Character and p.Character.PrimaryPart then
-                if (targetPos - p.Character.PrimaryPart.Position).Magnitude < dangerRadius then
-                    danger = true
-                    break
-                end
-            end
-        end
-        if danger then
-            reached = true
-            stopMover()
-            return
-        end
-
-        -- Warp 10 steps per frame, step ใหญ่ด้วย warpMultiplier → เร็วมาก
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
         if dist < 2 then reached = true; stopMover(); return end
+        -- Warp 10 steps per frame แต่ละ step ใหญ่ด้วย warpMultiplier → เร็วมาก
         local step = (diff / warpSteps) * warpMultiplier
         for i = 1, warpSteps do
             hrp.CFrame = hrp.CFrame + step
@@ -226,7 +198,7 @@ local function collectLoop()
         end
 
         setStatus("Going to " .. food.instance.Name, Color3.fromRGB(90, 200, 90))
-        moveTo(food)
+        moveTo(food.position)
     end
     setStatus("Stopped")
 end
