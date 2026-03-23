@@ -1,13 +1,11 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
-local RunService        = game:GetService("RunService")
 local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
 local running = false
-local currentTarget = nil
 
 -- 🔥 Anti AFK
 player.Idled:Connect(function()
@@ -60,50 +58,33 @@ local function getClosestFood()
     return best
 end
 
--- 🔥 Heartbeat mover (ลื่น ไม่ค้าง)
-RunService.Heartbeat:Connect(function()
-    if not running then return end
-
+-- 🔥 moveTo (วาร์ป 2 จังหวะ = เร็ว + ไม่แล็ค)
+local function moveTo(target)
     local hrp = getHRP()
     if not hrp then return end
 
-    -- หาเป้าใหม่
-    if not currentTarget or not currentTarget.Parent then
-        currentTarget = getClosestFood()
-        return
-    end
-
     local pos =
-        (currentTarget:IsA("Model") and currentTarget:GetPivot().Position)
-        or (currentTarget:IsA("BasePart") and currentTarget.Position)
+        (target:IsA("Model") and target:GetPivot().Position)
+        or (target:IsA("BasePart") and target.Position)
 
-    if not pos then
-        currentTarget = nil
-        return
-    end
+    if not pos then return end
 
-    -- 🔥 กันผู้เล่น
-    if isPlayerNear(pos, 40) then
-        currentTarget = nil
-        return
-    end
+    -- กันคน
+    if isPlayerNear(pos, 50) then return end
 
-    local diff = pos - hrp.Position
-    local dist = diff.Magnitude
+    -- 🔥 วาร์ปกลางทาง
+    local mid = hrp.Position:Lerp(pos, 0.6)
+    hrp.CFrame = CFrame.new(mid)
 
-    -- ถึงแล้ว
-    if dist < 10 then
+    task.wait(0.05)
+
+    -- 🔥 วาร์ปถึง
+    if not isPlayerNear(pos, 40) then
         hrp.CFrame = CFrame.new(pos)
-        currentTarget = nil
-        return
     end
+end
 
-    -- 🔥 speed 200
-    local step = math.min(200, dist)
-    hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
-end)
-
--- 🎨 GUI ดำขาว
+-- 🎨 GUI ดำ-ขาว
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 gui.ResetOnSpawn = false
 
@@ -117,13 +98,12 @@ Instance.new("UICorner", frame).CornerRadius = UDim.new(0,12)
 
 local stroke = Instance.new("UIStroke", frame)
 stroke.Color = Color3.fromRGB(255,255,255)
-stroke.Thickness = 1
 
 local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1,0,0,40)
 title.BackgroundTransparency = 1
 title.Text = "Food Collector"
-title.TextColor3 = Color3.fromRGB(255,255,255)
+title.TextColor3 = Color3.new(1,1,1)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 
@@ -138,31 +118,38 @@ local function setStatus(t)
     status.Text = "Status: "..t
 end
 
-local function makeBtn(text,pos,color)
+local function makeBtn(text,pos)
     local b = Instance.new("TextButton", frame)
     b.Size = UDim2.new(0,90,0,35)
     b.Position = pos
     b.Text = text
-    b.BackgroundColor3 = color
+    b.BackgroundColor3 = Color3.fromRGB(40,40,40)
     b.TextColor3 = Color3.new(1,1,1)
     b.Font = Enum.Font.GothamBold
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
+    Instance.new("UICorner", b)
     return b
 end
 
-local startBtn = makeBtn("START", UDim2.new(0,20,0,90), Color3.fromRGB(40,40,40))
-local stopBtn  = makeBtn("STOP",  UDim2.new(0,130,0,90), Color3.fromRGB(80,80,80))
+local startBtn = makeBtn("START", UDim2.new(0,20,0,90))
+local stopBtn  = makeBtn("STOP",  UDim2.new(0,130,0,90))
 
--- loop แสดงสถานะ
+-- 🔥 loop
 local function loop()
     while running do
-        if not currentTarget then
-            setStatus("Searching...")
-        else
-            setStatus("Collecting")
+        local food = getClosestFood()
+
+        if not food then
+            setStatus("No safe food")
+            task.wait(0.3)
+            continue
         end
-        task.wait(0.2)
+
+        setStatus("Collecting")
+        moveTo(food)
+
+        task.wait(0.1) -- 🔥 ลดแล็ค
     end
+
     setStatus("Stopped")
 end
 
