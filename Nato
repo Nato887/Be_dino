@@ -2,14 +2,14 @@ local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService  = game:GetService("UserInputService")
-local VirtualUser       = game:GetService("VirtualUser") -- 🔥 Anti AFK
+local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
 local running    = false
 local tweenSpeed = 100
-local MAX_SPEED  = 10000 -- 🔥 เพิ่มเป็น 10000
+local MAX_SPEED  = 10000
 local moverConn  = nil
 
 -- 🔥 Anti AFK
@@ -31,6 +31,21 @@ local function getHRP()
     return char.PrimaryPart
 end
 
+-- 🔥 เช็คผู้เล่นใกล้
+local function isPlayerNear(pos, radius)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character then
+            local hrp = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character:FindFirstChild("RootPart")
+            if hrp then
+                if (hrp.Position - pos).Magnitude < radius then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
 -- ── หา food ──
 local function getClosestFood()
     local hrp = getHRP()
@@ -50,6 +65,11 @@ local function getClosestFood()
         end)
 
         if ok and pos then
+            -- 🔥 กันชนคน
+            if isPlayerNear(pos, 50) then
+                continue
+            end
+
             local d = (hrp.Position - pos).Magnitude
             if d < bestDist then
                 bestDist = d
@@ -69,7 +89,7 @@ local function stopMover()
     end
 end
 
--- ── move ──
+-- 🔥 move ลื่นแบบคลิป + snap
 local function moveTo(targetPos)
     local reached = false
     local startTime = tick()
@@ -78,7 +98,6 @@ local function moveTo(targetPos)
 
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
-
         if not hrp or not running then
             reached = true
             stopMover()
@@ -88,24 +107,37 @@ local function moveTo(targetPos)
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
 
-        if dist < 2 then
+        -- 🔥 snap ใกล้
+        if dist < 15 then
+            hrp.CFrame = CFrame.new(targetPos)
             reached = true
             stopMover()
             return
         end
 
-        if tick() - startTime > 5 then
+        -- 🔥 กันคน
+        if isPlayerNear(targetPos, 40) then
             reached = true
             stopMover()
             return
         end
 
-        local step = math.min(tweenSpeed * dt, dist)
+        -- 🔥 กันค้าง
+        if tick() - startTime > 4 then
+            hrp.CFrame = CFrame.new(targetPos)
+            reached = true
+            stopMover()
+            return
+        end
+
+        local speedBoost = tweenSpeed * 1.5
+        local step = math.min(speedBoost * dt, dist)
+
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
 
     while not reached do
-        task.wait(0.05)
+        task.wait()
     end
 end
 
@@ -140,7 +172,7 @@ local function setStatus(msg, color)
     statusLbl.TextColor3 = color or Color3.fromRGB(150,150,180)
 end
 
--- slider
+-- slider มือถือ
 local track = Instance.new("Frame", panel)
 track.Size = UDim2.new(1,-20,0,8)
 track.Position = UDim2.new(0,10,0,122)
@@ -182,7 +214,7 @@ UserInputService.InputChanged:Connect(function(i)
     speedLbl.Text = "Speed: "..tweenSpeed.." studs/s"
 end)
 
--- buttons
+-- ปุ่ม
 local function makeBtn(text,x)
     local b = Instance.new("TextButton", panel)
     b.Size = UDim2.new(0,112,0,36)
@@ -200,7 +232,7 @@ local function loop()
         local food = getClosestFood()
 
         if not food then
-            setStatus("No food...", Color3.fromRGB(200,180,80))
+            setStatus("No safe food...", Color3.fromRGB(200,180,80))
             task.wait(0.3)
             continue
         end
