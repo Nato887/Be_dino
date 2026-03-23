@@ -1,14 +1,12 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
-local UserInputService  = game:GetService("UserInputService")
+local RunService        = game:GetService("RunService")
 local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
-local running    = false
-local tweenSpeed = 500 -- ใช้เป็น step แล้ว
-local MAX_SPEED  = 10000
+local running = false
 
 -- 🔥 Anti AFK
 player.Idled:Connect(function()
@@ -20,11 +18,10 @@ end)
 -- Root
 local function getHRP()
     local char = player.Character
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+    return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 end
 
--- 🔥 กันผู้เล่น
+-- กันผู้เล่น
 local function isPlayerNear(pos, radius)
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
@@ -50,9 +47,7 @@ local function getClosestFood()
         local pos = (food:IsA("Model") and food:GetPivot().Position)
                  or (food:IsA("BasePart") and food.Position)
 
-        if pos then
-            if isPlayerNear(pos, 50) then continue end
-
+        if pos and not isPlayerNear(pos, 50) then
             local d = (hrp.Position - pos).Magnitude
             if d < bestDist then
                 bestDist = d
@@ -64,7 +59,7 @@ local function getClosestFood()
     return best
 end
 
--- 🔥 moveTo (วาร์ปรัว 500)
+-- 🔥 วาร์ปแบบ burst (เร็ว + ไม่ค้าง)
 local function moveTo(targetPos)
     local startTime = tick()
 
@@ -84,94 +79,67 @@ local function moveTo(targetPos)
             break
         end
 
-        if tick() - startTime > 3 then
+        if tick() - startTime > 2.5 then
             hrp.CFrame = CFrame.new(targetPos)
             break
         end
 
-        local step = math.min(tweenSpeed, dist)
-        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
+        -- 🔥 burst teleport (ลื่น + ไม่ค้าง)
+        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * math.min(120, dist))
 
-        task.wait()
+        RunService.Heartbeat:Wait()
     end
 end
 
--- GUI
+-- 🎨 GUI ดำขาว
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 gui.ResetOnSpawn = false
 
-local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,270,0,215)
-panel.Position = UDim2.new(0.5,-135,0.5,-107)
-panel.BackgroundColor3 = Color3.fromRGB(18,18,28)
-panel.Active = true
-panel.Draggable = true
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0,240,0,150)
+frame.Position = UDim2.new(0.5,-120,0.5,-75)
+frame.BackgroundColor3 = Color3.fromRGB(15,15,15)
+frame.Active = true
+frame.Draggable = true
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0,12)
 
-local statusLbl = Instance.new("TextLabel", panel)
-statusLbl.Position = UDim2.new(0,10,0,46)
-statusLbl.Size = UDim2.new(1,-20,0,22)
-statusLbl.BackgroundTransparency = 1
-statusLbl.Text = "Status: Idle"
+local stroke = Instance.new("UIStroke", frame)
+stroke.Color = Color3.fromRGB(255,255,255)
+stroke.Thickness = 1
 
-local speedLbl = Instance.new("TextLabel", panel)
-speedLbl.Position = UDim2.new(0,10,0,94)
-speedLbl.Size = UDim2.new(1,-20,0,20)
-speedLbl.BackgroundTransparency = 1
-speedLbl.Text = "Speed: 500"
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1,0,0,40)
+title.BackgroundTransparency = 1
+title.Text = "Food Collector"
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
 
-local function setStatus(msg)
-    statusLbl.Text = "Status: "..msg
+local status = Instance.new("TextLabel", frame)
+status.Position = UDim2.new(0,0,0,40)
+status.Size = UDim2.new(1,0,0,25)
+status.BackgroundTransparency = 1
+status.Text = "Status: Idle"
+status.TextColor3 = Color3.fromRGB(200,200,200)
+
+local function setStatus(t)
+    status.Text = "Status: "..t
 end
 
--- slider มือถือ
-local track = Instance.new("Frame", panel)
-track.Size = UDim2.new(1,-20,0,8)
-track.Position = UDim2.new(0,10,0,122)
-
-local fill = Instance.new("Frame", track)
-fill.Size = UDim2.new(tweenSpeed/MAX_SPEED,0,1,0)
-
-local knob = Instance.new("TextButton", track)
-knob.Size = UDim2.new(0,20,0,20)
-knob.Position = UDim2.new(tweenSpeed/MAX_SPEED,-10,0.5,-10)
-
-local dragging = false
-
-knob.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(i)
-    if not dragging then return end
-    if i.UserInputType ~= Enum.UserInputType.Touch and i.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-
-    local ratio = math.clamp((i.Position.X - track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
-
-    tweenSpeed = math.floor(ratio * MAX_SPEED)
-    fill.Size = UDim2.new(ratio,0,1,0)
-    knob.Position = UDim2.new(ratio,-10,0.5,-10)
-    speedLbl.Text = "Speed: "..tweenSpeed
-end)
-
--- buttons
-local function makeBtn(text,x)
-    local b = Instance.new("TextButton", panel)
-    b.Size = UDim2.new(0,112,0,36)
-    b.Position = UDim2.new(0,x,0,162)
+local function makeBtn(text,pos,color)
+    local b = Instance.new("TextButton", frame)
+    b.Size = UDim2.new(0,90,0,35)
+    b.Position = pos
     b.Text = text
+    b.BackgroundColor3 = color
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
     return b
 end
 
-local startBtn = makeBtn("Start",16)
-local stopBtn  = makeBtn("Stop",142)
+local startBtn = makeBtn("START", UDim2.new(0,20,0,90), Color3.fromRGB(40,40,40))
+local stopBtn  = makeBtn("STOP",  UDim2.new(0,130,0,90), Color3.fromRGB(80,80,80))
 
 -- loop
 local function loop()
