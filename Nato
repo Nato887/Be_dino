@@ -7,6 +7,7 @@ local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
 local running = false
+local currentTarget = nil
 
 -- 🔥 Anti AFK
 player.Idled:Connect(function()
@@ -21,7 +22,7 @@ local function getHRP()
     return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 end
 
--- กันผู้เล่น
+-- 🔥 กันผู้เล่น
 local function isPlayerNear(pos, radius)
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
@@ -51,7 +52,7 @@ local function getClosestFood()
             local d = (hrp.Position - pos).Magnitude
             if d < bestDist then
                 bestDist = d
-                best = {instance = food, position = pos}
+                best = food
             end
         end
     end
@@ -59,37 +60,48 @@ local function getClosestFood()
     return best
 end
 
--- 🔥 วาร์ปแบบ burst (เร็ว + ไม่ค้าง)
-local function moveTo(targetPos)
-    local startTime = tick()
+-- 🔥 Heartbeat mover (ลื่น ไม่ค้าง)
+RunService.Heartbeat:Connect(function()
+    if not running then return end
 
-    while running do
-        local hrp = getHRP()
-        if not hrp then break end
+    local hrp = getHRP()
+    if not hrp then return end
 
-        local diff = targetPos - hrp.Position
-        local dist = diff.Magnitude
-
-        if dist < 10 then
-            hrp.CFrame = CFrame.new(targetPos)
-            break
-        end
-
-        if isPlayerNear(targetPos, 40) then
-            break
-        end
-
-        if tick() - startTime > 2.5 then
-            hrp.CFrame = CFrame.new(targetPos)
-            break
-        end
-
-        -- 🔥 burst teleport (ลื่น + ไม่ค้าง)
-        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * math.min(120, dist))
-
-        RunService.Heartbeat:Wait()
+    -- หาเป้าใหม่
+    if not currentTarget or not currentTarget.Parent then
+        currentTarget = getClosestFood()
+        return
     end
-end
+
+    local pos =
+        (currentTarget:IsA("Model") and currentTarget:GetPivot().Position)
+        or (currentTarget:IsA("BasePart") and currentTarget.Position)
+
+    if not pos then
+        currentTarget = nil
+        return
+    end
+
+    -- 🔥 กันผู้เล่น
+    if isPlayerNear(pos, 40) then
+        currentTarget = nil
+        return
+    end
+
+    local diff = pos - hrp.Position
+    local dist = diff.Magnitude
+
+    -- ถึงแล้ว
+    if dist < 10 then
+        hrp.CFrame = CFrame.new(pos)
+        currentTarget = nil
+        return
+    end
+
+    -- 🔥 speed 200
+    local step = math.min(200, dist)
+    hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
+end)
 
 -- 🎨 GUI ดำขาว
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
@@ -141,21 +153,16 @@ end
 local startBtn = makeBtn("START", UDim2.new(0,20,0,90), Color3.fromRGB(40,40,40))
 local stopBtn  = makeBtn("STOP",  UDim2.new(0,130,0,90), Color3.fromRGB(80,80,80))
 
--- loop
+-- loop แสดงสถานะ
 local function loop()
     while running do
-        local food = getClosestFood()
-
-        if not food then
-            setStatus("No safe food")
-            task.wait(0.3)
-            continue
+        if not currentTarget then
+            setStatus("Searching...")
+        else
+            setStatus("Collecting")
         end
-
-        setStatus("Going to "..food.instance.Name)
-        moveTo(food.position)
+        task.wait(0.2)
     end
-
     setStatus("Stopped")
 end
 
@@ -168,7 +175,6 @@ end)
 
 stopBtn.Activated:Connect(function()
     running = false
-    setStatus("Stopped")
 end)
 
 setStatus("Idle")
