@@ -1,28 +1,83 @@
 local running = false
+local enabled = false -- 👈 ใช้เปิด/ปิดระบบ
+
 local player = game:GetService("Players").LocalPlayer
 local runService = game:GetService("RunService")
 
+-- ================= GUI =================
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "MeatFarmGUI"
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 200, 0, 120)
+frame.Position = UDim2.new(0, 20, 0, 200)
+frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- ดำ
+frame.BorderSizePixel = 0
+
+local uiCorner = Instance.new("UICorner", frame)
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Text = "MEAT FARM 🦖"
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.fromRGB(0, 255, 0) -- เขียว
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 18
+
+local startBtn = Instance.new("TextButton", frame)
+startBtn.Size = UDim2.new(0.8, 0, 0, 30)
+startBtn.Position = UDim2.new(0.1, 0, 0.4, 0)
+startBtn.Text = "START"
+startBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+startBtn.TextColor3 = Color3.new(1,1,1)
+
+local stopBtn = Instance.new("TextButton", frame)
+stopBtn.Size = UDim2.new(0.8, 0, 0, 30)
+stopBtn.Position = UDim2.new(0.1, 0, 0.7, 0)
+stopBtn.Text = "STOP"
+stopBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+stopBtn.TextColor3 = Color3.new(1,1,1)
+
+-- 🦖 รูปไดโน
+local image = Instance.new("ImageLabel", frame)
+image.Size = UDim2.new(0, 40, 0, 40)
+image.Position = UDim2.new(1, -45, 0, -5)
+image.BackgroundTransparency = 1
+image.Image = "rbxassetid://12522030" -- ไดโน (เปลี่ยนไอดีได้)
+
+-- ปุ่มทำงาน
+startBtn.MouseButton1Click:Connect(function()
+	enabled = true
+end)
+
+stopBtn.MouseButton1Click:Connect(function()
+	enabled = false
+end)
+
+-- ================= CODE เดิม =================
 runService.RenderStepped:Connect(function()
-	if running == false then
-		running = true
-		
-		local char = player.Character
-		local root = char and char:FindFirstChild("RootPart")
-		
-		if root then
-			for _, v in ipairs(workspace:GetChildren()) do
-				pcall(function()
-					if v.Name:lower():find("meat") then
-						local target = v:FindFirstChild(v.Name:lower():gsub("_", ""))
-						if target then
-							root.CFrame = target.CFrame
-							task.wait(0.1) -- 👈 ปรับตรงนี้
+	if enabled then -- 👈 เพิ่มแค่เช็คนี้
+		if running == false then
+			running = true
+			
+			local char = player.Character
+			local root = char and char:FindFirstChild("RootPart")
+			
+			if root then
+				for _, v in ipairs(workspace:GetChildren()) do
+					pcall(function()
+						if v.Name:lower():find("meat") then
+							local target = v:FindFirstChild(v.Name:lower():gsub("_", ""))
+							if target then
+								root.CFrame = target.CFrame
+								task.wait(0.1)
+							end
 						end
-					end
-				end)
+					end)
+				end
 			end
+			
+			running = false
 		end
-		
-		running = false
 	end
 end)
