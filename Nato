@@ -15,7 +15,9 @@ local running   = false
 local tweenSpeed = 100
 local moverConn  = nil
 local fastMode   = false
+local huntMode   = false
 local currentTarget = nil
+local updateRate = 0.05 -- FPS control
 
 -- ROOT
 local function getHRP()
@@ -53,7 +55,7 @@ local function getMyGrowth()
     return g and g.Value or 0
 end
 
--- PLAYER AI (FIXED)
+-- PLAYER AI
 local function getTargetPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -71,13 +73,13 @@ local function getTargetPlayer()
             if root and growth then
                 local dist = (hrp.Position - root.Position).Magnitude
 
-                -- หนีทันที
+                -- หนี
                 if dist <= DETECT_DISTANCE and growth.Value > myGrowth then
                     currentTarget = nil
                     return "ESCAPE", root.Position
                 end
 
-                -- หาเป้าล่า
+                -- ล่า
                 if growth.Value < myGrowth and dist < nearestDist then
                     nearestDist = dist
                     nearestHunt = root
@@ -100,7 +102,7 @@ local function getTargetPlayer()
     return nil
 end
 
--- MOVE (REALTIME)
+-- MOVE (แม่น)
 local function stopMover()
     if moverConn then moverConn:Disconnect(); moverConn = nil end
 end
@@ -112,18 +114,23 @@ local function moveTo(targetPos)
         local hrp = getHRP()
         if not hrp or not running then return end
 
-        -- anti void
         if hrp.Position.Y < SAFE_Y then
             hrp.CFrame = CFrame.new(0,50,0)
         end
 
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
-        if dist < 2 then return end
+        if dist < 3 then return end
 
-        local speedMultiplier = fastMode and 5 or 1
-        local step = math.min(tweenSpeed * speedMultiplier * dt, dist)
+        local dynamicSpeed = tweenSpeed
 
+        if dist < 20 then
+            dynamicSpeed = dynamicSpeed * 0.4
+        elseif dist < 10 then
+            dynamicSpeed = dynamicSpeed * 0.2
+        end
+
+        local step = math.min(dynamicSpeed * dt, dist)
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
 end
@@ -146,13 +153,11 @@ gui.Parent = player:WaitForChild("PlayerGui")
 local toggleBtn = Instance.new("TextButton", gui)
 toggleBtn.Size = UDim2.new(0,120,0,32)
 toggleBtn.Position = UDim2.new(0,10,0,10)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(20,20,20)
 toggleBtn.Text = "🦖 OPEN"
-toggleBtn.TextColor3 = Color3.fromRGB(0,255,120)
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,300,0,260)
-panel.Position = UDim2.new(0.5,-150,0.5,-130)
+panel.Size = UDim2.new(0,300,0,280)
+panel.Position = UDim2.new(0.5,-150,0.5,-140)
 panel.BackgroundColor3 = Color3.fromRGB(15,15,15)
 
 toggleBtn.MouseButton1Click:Connect(function()
@@ -207,7 +212,18 @@ UserInputService.TouchMoved:Connect(function(input)
     if dragging then updateSlider(input.Position.X) end
 end)
 
--- FAST MODE
+-- HUNT BUTTON
+local huntBtn = Instance.new("TextButton", panel)
+huntBtn.Size = UDim2.new(0,120,0,40)
+huntBtn.Position = UDim2.new(0.5,-60,1,-150)
+huntBtn.Text = "🦖 HUNT: OFF"
+
+huntBtn.MouseButton1Click:Connect(function()
+    huntMode = not huntMode
+    huntBtn.Text = huntMode and "🦖 HUNT: ON" or "🦖 HUNT: OFF"
+end)
+
+-- FAST (FPS MODE)
 local fastBtn = Instance.new("TextButton", panel)
 fastBtn.Size = UDim2.new(0,120,0,40)
 fastBtn.Position = UDim2.new(0.5,-60,1,-100)
@@ -215,6 +231,13 @@ fastBtn.Text = "⚡ FAST: OFF"
 
 fastBtn.MouseButton1Click:Connect(function()
     fastMode = not fastMode
+
+    if fastMode then
+        updateRate = 0.005
+    else
+        updateRate = 0.05
+    end
+
     fastBtn.Text = fastMode and "⚡ FAST: ON" or "⚡ FAST: OFF"
 end)
 
@@ -229,7 +252,7 @@ local function collectLoop()
             local dir = (hrp.Position - pos).Unit
             moveTo(hrp.Position + dir * 200)
 
-        elseif state == "HUNT" then
+        elseif huntMode and state == "HUNT" then
             setStatus("HUNTING")
             moveTo(pos)
 
@@ -243,7 +266,7 @@ local function collectLoop()
             end
         end
 
-        task.wait(fastMode and 0.01 or 0.05)
+        task.wait(updateRate)
     end
 end
 
