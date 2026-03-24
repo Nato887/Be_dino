@@ -16,19 +16,15 @@ local tweenSpeed = 100
 local moverConn  = nil
 local fastMode   = false
 local huntMode   = false
-local currentTarget = nil
-local updateRate = 0.05 -- FPS control
+local updateRate = 0.05
 
 -- ROOT
 local function getHRP()
     local char = player.Character
     if not char then return nil end
-    for _, v in ipairs(char:GetChildren()) do
-        if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
-            return v
-        end
-    end
-    return char.PrimaryPart
+    return char:FindFirstChild("HumanoidRootPart")
+        or char:FindFirstChild("RootPart")
+        or char.PrimaryPart
 end
 
 -- FOOD
@@ -48,14 +44,21 @@ local function getClosestFood()
     return best
 end
 
--- GROWTH
+-- GROWTH (รองรับหลายแบบ)
 local function getMyGrowth()
     local char = player.Character
     local g = char and char:FindFirstChild("Growth")
-    return g and g.Value or 0
+    if g then return g.Value end
+
+    local ls = player:FindFirstChild("leaderstats")
+    if ls and ls:FindFirstChild("Growth") then
+        return ls.Growth.Value
+    end
+
+    return 0
 end
 
--- PLAYER AI
+-- 🔥 PLAYER AI (FIXED จริง)
 local function getTargetPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -65,44 +68,44 @@ local function getTargetPlayer()
     local nearestHunt = nil
     local nearestDist = math.huge
 
-    for _, plr in Players:GetPlayers() do
+    for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
+
             local root = plr.Character:FindFirstChild("HumanoidRootPart")
-            local growth = plr.Character:FindFirstChild("Growth")
+                or plr.Character:FindFirstChild("RootPart")
+                or plr.Character.PrimaryPart
+
+            local growth =
+                plr.Character:FindFirstChild("Growth")
+                or (plr:FindFirstChild("leaderstats") and plr.leaderstats:FindFirstChild("Growth"))
 
             if root and growth then
                 local dist = (hrp.Position - root.Position).Magnitude
 
                 -- หนี
                 if dist <= DETECT_DISTANCE and growth.Value > myGrowth then
-                    currentTarget = nil
                     return "ESCAPE", root.Position
                 end
 
                 -- ล่า
-                if growth.Value < myGrowth and dist < nearestDist then
-                    nearestDist = dist
-                    nearestHunt = root
+                if huntMode and growth.Value < myGrowth then
+                    if dist < nearestDist then
+                        nearestDist = dist
+                        nearestHunt = root
+                    end
                 end
             end
         end
     end
 
-    -- ล็อกเป้า
-    if currentTarget and currentTarget.Parent then
-        return "HUNT", currentTarget.Position
-    end
-
     if nearestHunt then
-        currentTarget = nearestHunt
         return "HUNT", nearestHunt.Position
     end
 
-    currentTarget = nil
     return nil
 end
 
--- MOVE (แม่น)
+-- MOVE
 local function stopMover()
     if moverConn then moverConn:Disconnect(); moverConn = nil end
 end
@@ -122,25 +125,26 @@ local function moveTo(targetPos)
         local dist = diff.Magnitude
         if dist < 3 then return end
 
-        local dynamicSpeed = tweenSpeed
+        local speed = tweenSpeed
 
         if dist < 20 then
-            dynamicSpeed = dynamicSpeed * 0.4
+            speed = speed * 0.4
         elseif dist < 10 then
-            dynamicSpeed = dynamicSpeed * 0.2
+            speed = speed * 0.2
         end
 
-        local step = math.min(dynamicSpeed * dt, dist)
+        local step = math.min(speed * dt, dist)
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
 end
 
--- ANTI AFK
+-- ANTI AFK (อัปเกรด)
 task.spawn(function()
     while true do
-        task.wait(60)
+        task.wait(30)
         VirtualUser:CaptureController()
         VirtualUser:ClickButton2(Vector2.new())
+        VirtualUser:ClickButton1(Vector2.new())
     end
 end)
 
@@ -223,7 +227,7 @@ huntBtn.MouseButton1Click:Connect(function()
     huntBtn.Text = huntMode and "🦖 HUNT: ON" or "🦖 HUNT: OFF"
 end)
 
--- FAST (FPS MODE)
+-- FAST (FPS)
 local fastBtn = Instance.new("TextButton", panel)
 fastBtn.Size = UDim2.new(0,120,0,40)
 fastBtn.Position = UDim2.new(0.5,-60,1,-100)
@@ -231,13 +235,7 @@ fastBtn.Text = "⚡ FAST: OFF"
 
 fastBtn.MouseButton1Click:Connect(function()
     fastMode = not fastMode
-
-    if fastMode then
-        updateRate = 0.005
-    else
-        updateRate = 0.05
-    end
-
+    updateRate = fastMode and 0.02 or 0.05
     fastBtn.Text = fastMode and "⚡ FAST: ON" or "⚡ FAST: OFF"
 end)
 
@@ -252,7 +250,7 @@ local function collectLoop()
             local dir = (hrp.Position - pos).Unit
             moveTo(hrp.Position + dir * 200)
 
-        elseif huntMode and state == "HUNT" then
+        elseif state == "HUNT" then
             setStatus("HUNTING")
             moveTo(pos)
 
