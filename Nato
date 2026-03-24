@@ -142,7 +142,7 @@ fastBtn.BackgroundColor3 = Color3.fromRGB(0,255,120)
 
 fastBtn.MouseButton1Click:Connect(function()
     fastMode = not fastMode
-    if fastMode then task.spawn(optimizeMapLoop) end
+    if fastMode then task.spawn(function() optimizeMapLoop() end) end
     fastBtn.Text = fastMode and "FAST ON" or "FAST OFF"
 end)
 
@@ -182,7 +182,7 @@ local function makeSlider(y, max, default, callback)
 end
 
 makeSlider(50,20000,100,function(v) tweenSpeed=v end)
-makeSlider(90,10000,1000,function(v) tweenSpeed=v end) -- slider หนีไม่ระบุชื่อ
+makeSlider(90,10000,1000,function(v) tweenSpeed=v end)
 
 -- LOOP FARM
 start.MouseButton1Click:Connect(function()
@@ -201,4 +201,5 @@ stop.MouseButton1Click:Connect(function()
     stopMover()
 end)
 
-setStatus = function() end -- กัน error
+-- SET STATUS IDLE ด้านล่างสุด
+setStatus("Idle")
