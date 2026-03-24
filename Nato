@@ -32,16 +32,16 @@ local function getHRP()
     return char.PrimaryPart
 end
 
--- ── Get Growth ──
+-- ── Get Growth (Volume-based) ──
 local function getGrowth(char)
     if not char then return 0 end
     local root = char:FindFirstChild("RootPart") or char:FindFirstChild("HumanoidRootPart")
     return root and (root.Size.X * root.Size.Y * root.Size.Z) or 0
 end
 
--- ================= GUI DESIGN (Premium Redesign) =================
+-- ================= GUI DESIGN (Premium) =================
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "NatoHub_V20_Fixed"; gui.ResetOnSpawn = false
+gui.Name = "NatoHub_V20_Final"; gui.ResetOnSpawn = false
 
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 520, 0, 340); main.Position = UDim2.new(0.5, -260, 0.5, -170)
@@ -102,7 +102,6 @@ local function createToggle(p, n, pr)
     end)
 end
 
--- เพิ่มปุ่มที่หายไปกลับมา
 createToggle(tabs.Tab1, "Auto Food (Tween)", "autoFood")
 createToggle(tabs.Tab1, "Hunt Smaller (10k+)", "huntWeaker")
 createToggle(tabs.Tab1, "Avoid Bigger (150s)", "avoidPlayers")
@@ -123,7 +122,7 @@ knob.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Mou
 UserInputService.InputChanged:Connect(function(i) if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then updateSlider(i) end end)
 UserInputService.InputEnded:Connect(function() drag = false end)
 
--- ================= TAB 2: BOSS & MISC (ตามรูปภาพ) =================
+-- ================= TAB 2: BOSS & MISC =================
 local bossSec = Instance.new("Frame", tabs.Tab2); bossSec.Size = UDim2.new(0.95, 0, 0, 130); bossSec.BackgroundColor3 = Color3.fromRGB(22, 18, 35); Instance.new("UICorner", bossSec)
 local bIcon = Instance.new("ImageLabel", bossSec); bIcon.Size = UDim2.new(0, 25, 0, 25); bIcon.Position = UDim2.new(0, 12, 0, 12); bIcon.Image = "rbxassetid://6031215981"; bIcon.BackgroundTransparency = 1
 local bTitle = Instance.new("TextLabel", bossSec); bTitle.Size = UDim2.new(0, 100, 0, 25); bTitle.Position = UDim2.new(0, 45, 0, 12); bTitle.Text = "Auto Boss"; bTitle.TextColor3 = Color3.new(1,1,1); bTitle.Font = Enum.Font.GothamBold; bTitle.BackgroundTransparency = 1; bTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -150,8 +149,16 @@ createMiscBtn("Fast Mode (Toggle Save Battery)", function()
 end)
 
 createMiscBtn("Server Hop (Find New Room)", function()
-    local s = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
-    for _, v in pairs(s.data) do if v.playing < v.maxPlayers and v.id ~= game.JobId then TeleportService:TeleportToPlaceInstance(game.PlaceId, v.id, player) break end end
+    local success, result = pcall(function()
+        local s = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=50"))
+        for _, v in pairs(s.data) do 
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then 
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, v.id, player) 
+                return true
+            end 
+        end
+    end)
+    if not success then warn("Server Hop Error: "..tostring(result)) end
 end)
 
 -- ================= CORE LOGIC =================
