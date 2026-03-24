@@ -1,108 +1,154 @@
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
-local UserInputService  = game:GetService("UserInputService")
+local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 
--- ================= SETTINGS (V15) =================
+-- ================= SETTINGS (V17 Compact) =================
 local settings = {
+    autoFood = false,
     huntWeaker = false,
     avoidPlayers = false,
     antiVoid = true,
     antiAFK = true,
-    autoBoss = false, -- ✅ ระบบ Auto Boss ใหม่
-    tweenSpeed = 150
+    autoBoss = false,
+    tweenSpeed = 150,
 }
 
--- ── 🦖 ระบบ Auto Boss (Auto QTE 0.15s) ──
-local function handleAutoBoss()
-    if not settings.autoBoss then return end
-    
-    -- ค้นหา UI ของบอสที่มักจะมีปุ่ม QTE โผล่มา
-    local playerGui = player:WaitForChild("PlayerGui")
-    -- หมายเหตุ: ชื่อ UI "QTE" หรือ "SkillCheck" อาจเปลี่ยนไปตามเกม Be Dino
-    local qteFrame = playerGui:FindFirstChild("QTE", true) or playerGui:FindFirstChild("SkillCheck", true)
-    
-    if qteFrame and qteFrame.Visible then
-        task.wait(0.15) -- ⚡ หน่วงเวลา 0.15 วินาที ตามรูปภาพ
-        -- จำลองการกดคลิกซ้าย หรือกดปุ่มที่เกมกำหนดสำหรับ QTE
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-        task.wait(0.05)
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-    end
+-- ── ระบบ Get Root ──
+local function getHRP()
+    local char = player.Character
+    return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 end
 
--- ================= GUI Nato Hub V15 =================
+-- ================= GUI Nato Hub V17 (Mini Design) =================
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "NatoHub_V15"; gui.ResetOnSpawn = false
+gui.Name = "NatoHub_V17"; gui.ResetOnSpawn = false
 
-local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0, 280, 0, 460); panel.Position = UDim2.new(0.5, -140, 0.5, -230)
-panel.BackgroundColor3 = Color3.fromRGB(15, 10, 28); Instance.new("UICorner", panel)
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.new(0, 200, 0, 340) -- ย่อขนาดให้เล็กลงพิเศษ
+main.Position = UDim2.new(0.5, -100, 0.5, -170)
+main.BackgroundColor3 = Color3.fromRGB(15, 10, 25)
+main.BorderSizePixel = 0; main.Active = true; main.Draggable = true
+Instance.new("UICorner", main)
 
--- [ ส่วนหัวข้อ Title เหมือนเดิม... ]
+-- Tab System (Main / Boss)
+local tabFrame = Instance.new("Frame", main)
+tabFrame.Size = UDim2.new(1, 0, 0, 30); tabFrame.BackgroundTransparency = 1
 
-local function createToggle(name, sub, pos, prop)
-    local btn = Instance.new("TextButton", panel)
-    btn.Size = UDim2.new(0, 250, 0, 50); btn.Position = UDim2.new(0.5, -125, 0, pos)
+local mainBtn = Instance.new("TextButton", tabFrame)
+mainBtn.Size = UDim2.new(0.5, 0, 1, 0); mainBtn.Text = "Main"; mainBtn.BackgroundColor3 = Color3.fromRGB(35, 30, 60); mainBtn.TextColor3 = Color3.new(1,1,1); mainBtn.Font = Enum.Font.GothamBold; mainBtn.TextSize = 11
+
+local bossBtn = Instance.new("TextButton", tabFrame)
+bossBtn.Size = UDim2.new(0.5, 0, 1, 0); bossBtn.Position = UDim2.new(0.5, 0, 0, 0); bossBtn.Text = "Boss"; bossBtn.BackgroundColor3 = Color3.fromRGB(20, 15, 35); bossBtn.TextColor3 = Color3.new(0.6,0.6,0.6); bossBtn.Font = Enum.Font.GothamBold; bossBtn.TextSize = 11
+
+local mainPage = Instance.new("Frame", main)
+mainPage.Size = UDim2.new(1, 0, 1, -35); mainPage.Position = UDim2.new(0, 0, 0, 35); mainPage.BackgroundTransparency = 1
+
+local bossPage = Instance.new("Frame", main)
+bossPage.Size = UDim2.new(1, 0, 1, -35); bossPage.Position = UDim2.new(0, 0, 0, 35); bossPage.BackgroundTransparency = 1; bossPage.Visible = false
+
+mainBtn.MouseButton1Click:Connect(function() mainPage.Visible = true; bossPage.Visible = false; mainBtn.BackgroundColor3 = Color3.fromRGB(35, 30, 60); bossBtn.BackgroundColor3 = Color3.fromRGB(20, 15, 35) end)
+bossBtn.MouseButton1Click:Connect(function() mainPage.Visible = false; bossPage.Visible = true; bossBtn.BackgroundColor3 = Color3.fromRGB(35, 30, 60); mainBtn.BackgroundColor3 = Color3.fromRGB(20, 15, 35) end)
+
+-- ฟังก์ชันสร้างปุ่มแบบจิ๋ว
+local function createToggle(name, pos, prop, parent)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(0, 180, 0, 38); btn.Position = UDim2.new(0.5, -90, 0, pos)
     btn.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(30, 25, 55)
-    btn.Text = ""; Instance.new("UICorner", btn)
+    btn.Text = name; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamBold; btn.TextSize = 10; Instance.new("UICorner", btn)
     
-    local ml = Instance.new("TextLabel", btn)
-    ml.Size = UDim2.new(1, 0, 0, 25); ml.Position = UDim2.new(0, 12, 0, 5); ml.Text = name; ml.TextColor3 = Color3.new(1,1,1); ml.Font = Enum.Font.GothamBold; ml.TextSize = 13; ml.BackgroundTransparency = 1; ml.TextXAlignment = Enum.TextXAlignment.Left
-    
-    local sl = Instance.new("TextLabel", btn)
-    sl.Size = UDim2.new(1, 0, 0, 15); sl.Position = UDim2.new(0, 12, 0, 25); sl.Text = sub; sl.TextColor3 = Color3.fromRGB(140, 140, 160); sl.Font = Enum.Font.Gotham; sl.TextSize = 9; sl.BackgroundTransparency = 1; sl.TextXAlignment = Enum.TextXAlignment.Left
-
     btn.MouseButton1Click:Connect(function()
         settings[prop] = not settings[prop]
         btn.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(30, 25, 55)
     end)
 end
 
--- เพิ่มรายการเมนูตามรูปใหม่ของคุณ
-createToggle("Auto Boss", "Fires attack within 0.15s of each QTE", 50, "autoBoss")
-createToggle("Eat Smaller Players", "Hunt Growth > 5000 when safe", 105, "huntWeaker")
-createToggle("Avoid Players", "TP away from bigger dinos (150s)", 160, "avoidPlayers")
-createToggle("Anti Void", "Prevents falling into void", 215, "antiVoid")
-createToggle("Anti AFK", "Prevent AFK kick", 270, "antiAFK")
+-- หน้า Main
+createToggle("Auto Food", 5, "autoFood", mainPage)
+createToggle("Hunt Weaker", 48, "huntWeaker", mainPage)
+createToggle("Avoid (150s)", 91, "avoidPlayers", mainPage)
+createToggle("Anti Void", 134, "antiVoid", mainPage)
+createToggle("Anti AFK", 177, "antiAFK", mainPage)
 
--- [ ส่วน Speed Slider และปุ่ม Nato ลอย เหมือนเดิม... ]
+-- ─── 🎚️ SPEED SLIDER (Compact) ───
+local speedLabel = Instance.new("TextLabel", mainPage)
+speedLabel.Size = UDim2.new(1, 0, 0, 15); speedLabel.Position = UDim2.new(0, 0, 0, 225)
+speedLabel.Text = "Speed: 150"; speedLabel.TextColor3 = Color3.new(0.8, 0.8, 1); speedLabel.BackgroundTransparency = 1; speedLabel.Font = Enum.Font.Gotham; speedLabel.TextSize = 10
+
+local track = Instance.new("Frame", mainPage)
+track.Size = UDim2.new(0, 160, 0, 4); track.Position = UDim2.new(0.5, -80, 0, 250); track.BackgroundColor3 = Color3.fromRGB(45, 45, 70); Instance.new("UICorner", track)
+
+local fill = Instance.new("Frame", track)
+fill.Size = UDim2.new(0.15, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(130, 60, 255); Instance.new("UICorner", fill)
+
+local knob = Instance.new("TextButton", track)
+knob.Size = UDim2.new(0, 12, 0, 12); knob.Position = UDim2.new(0.15, -6, 0.5, -6); knob.BackgroundColor3 = Color3.new(1,1,1); knob.Text = ""; Instance.new("UICorner", knob)
+
+knob.InputChanged:Connect(function(i)
+    if (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+        local r = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        settings.tweenSpeed = math.floor(r * 1000); fill.Size = UDim2.new(r, 0, 1, 0); knob.Position = UDim2.new(r, -6, 0.5, -6); speedLabel.Text = "Speed: " .. settings.tweenSpeed
+    end
+end)
+
+-- หน้า Boss
+createToggle("Auto Boss (QTE 0.15s)", 10, "autoBoss", bossPage)
+
+-- ปุ่ม Nato (วงกลมเล็ก เปิด/ปิด)
+local natoBtn = Instance.new("TextButton", gui)
+natoBtn.Size = UDim2.new(0, 35, 0, 35); natoBtn.Position = UDim2.new(0, 10, 0, 10); natoBtn.BackgroundColor3 = Color3.fromRGB(130, 60, 255); natoBtn.Text = "Nato"; natoBtn.TextColor3 = Color3.new(1,1,1); natoBtn.TextSize = 10; Instance.new("UICorner", natoBtn).CornerRadius = UDim.new(1,0)
+natoBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
 
 -- ================= MAIN LOOP =================
 RunService.Heartbeat:Connect(function(dt)
     local hrp = getHRP()
     if not hrp then return end
 
-    -- 1. เรียกใช้งาน Auto Boss
-    handleAutoBoss()
-
-    -- 2. ระบบ Anti-Void
     if settings.antiVoid and hrp.Position.Y < -50 then
-        hrp.CFrame = CFrame.new(hrp.Position.X, 120, hrp.Position.Z); return
+        hrp.Velocity = Vector3.new(0,0,0); hrp.CFrame = CFrame.new(hrp.Position.X, 120, hrp.Position.Z); return
     end
 
-    -- 3. ระบบหนีตัวใหญ่
     if settings.avoidPlayers then
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                 local eRoot = p.Character.HumanoidRootPart
                 if eRoot.Size.Magnitude > hrp.Size.Magnitude and (hrp.Position - eRoot.Position).Magnitude < 150 then
-                    hrp.CFrame = CFrame.new(hrp.Position + (hrp.Position - eRoot.Position).Unit * (settings.tweenSpeed * dt))
-                    return
+                    hrp.CFrame = CFrame.new(hrp.Position + (hrp.Position - eRoot.Position).Unit * (settings.tweenSpeed * dt)); return
                 end
             end
         end
     end
 
-    -- 4. ระบบล่าผู้เล่น (Eat Smaller)
-    local target = getTargetPlayer() -- ฟังก์ชันเดิมที่เช็ค Growth > 5000
+    local target = nil
+    if settings.huntWeaker then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local eRoot = p.Character.HumanoidRootPart
+                if eRoot.Size.Magnitude < hrp.Size.Magnitude and eRoot.Size.Magnitude > 25 then target = eRoot; break end
+            end
+        end
+    end
+
+    if not target and settings.autoFood then
+        for _, v in ipairs(CollectionService:GetTagged("Food")) do
+            if v and v.Parent then target = v; break end
+        end
+    end
+
     if target then
-        local diff = target.Position - hrp.Position
-        if diff.Magnitude > 1.5 then
-            hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * (settings.tweenSpeed * dt))
+        local tPos = (target:IsA("Model") and target:GetPivot().Position) or target.Position
+        hrp.CFrame = CFrame.new(hrp.Position + (tPos - hrp.Position).Unit * (settings.tweenSpeed * dt))
+        hrp.Velocity = Vector3.new(0, 0.1, 0)
+    end
+    
+    if settings.autoBoss then
+        local qte = player.PlayerGui:FindFirstChild("QTE", true) or player.PlayerGui:FindFirstChild("SkillCheck", true)
+        if qte and qte.Visible then
+            task.wait(0.15); VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1); task.wait(0.05); VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
         end
     end
 end)
+
