@@ -27,6 +27,29 @@ local function getHRP()
         or char.PrimaryPart
 end
 
+-- 🔥 FAST MODE: ลบต้นไม้/ภูเขา
+local function optimizeMap(enable)
+    for _,v in pairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") then
+            local name = string.lower(v.Name)
+
+            if name:find("tree") 
+            or name:find("rock") 
+            or name:find("mountain") 
+            or name:find("bush") then
+                
+                if enable then
+                    v.LocalTransparencyModifier = 1
+                    v.CanCollide = false
+                else
+                    v.LocalTransparencyModifier = 0
+                    v.CanCollide = true
+                end
+            end
+        end
+    end
+end
+
 -- FOOD
 local function getClosestFood()
     local hrp = getHRP()
@@ -44,7 +67,7 @@ local function getClosestFood()
     return best
 end
 
--- GROWTH (รองรับหลายแบบ)
+-- GROWTH
 local function getMyGrowth()
     local char = player.Character
     local g = char and char:FindFirstChild("Growth")
@@ -58,7 +81,7 @@ local function getMyGrowth()
     return 0
 end
 
--- 🔥 PLAYER AI (FIXED จริง)
+-- PLAYER AI
 local function getTargetPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -99,7 +122,7 @@ local function getTargetPlayer()
     end
 
     if nearestHunt then
-        return "HUNT", nearestHunt.Position
+        return "HUNT", nearestHunt
     end
 
     return nil
@@ -138,7 +161,7 @@ local function moveTo(targetPos)
     end)
 end
 
--- ANTI AFK (อัปเกรด)
+-- ANTI AFK
 task.spawn(function()
     while true do
         task.wait(30)
@@ -227,7 +250,7 @@ huntBtn.MouseButton1Click:Connect(function()
     huntBtn.Text = huntMode and "🦖 HUNT: ON" or "🦖 HUNT: OFF"
 end)
 
--- FAST (FPS)
+-- FAST BUTTON
 local fastBtn = Instance.new("TextButton", panel)
 fastBtn.Size = UDim2.new(0,120,0,40)
 fastBtn.Position = UDim2.new(0.5,-60,1,-100)
@@ -235,24 +258,39 @@ fastBtn.Text = "⚡ FAST: OFF"
 
 fastBtn.MouseButton1Click:Connect(function()
     fastMode = not fastMode
-    updateRate = fastMode and 0.02 or 0.05
+
+    if fastMode then
+        updateRate = 0.02
+        optimizeMap(true)
+    else
+        updateRate = 0.05
+        optimizeMap(false)
+    end
+
     fastBtn.Text = fastMode and "⚡ FAST: ON" or "⚡ FAST: OFF"
 end)
 
 -- LOOP
 local function collectLoop()
     while running do
-        local state, pos = getTargetPlayer()
+        local state, target = getTargetPlayer()
 
         if state == "ESCAPE" then
             setStatus("ESCAPING")
             local hrp = getHRP()
-            local dir = (hrp.Position - pos).Unit
+            local dir = (hrp.Position - target).Unit
             moveTo(hrp.Position + dir * 200)
 
-        elseif state == "HUNT" then
+        elseif state == "HUNT" and target then
             setStatus("HUNTING")
-            moveTo(pos)
+
+            stopMover()
+            moverConn = RunService.Heartbeat:Connect(function()
+                local hrp = getHRP()
+                if not hrp then return end
+
+                hrp.CFrame = CFrame.new(target.Position + Vector3.new(0,2,0))
+            end)
 
         else
             local food = getClosestFood()
