@@ -13,6 +13,7 @@ local running = false
 local tweenSpeed = 100
 local fastMode = false
 local updateRate = 0.05
+local whiteScreenOn = false
 
 -- ROOT
 local function getHRP()
@@ -92,8 +93,8 @@ gui.Name = "Be-Dino-Farm-NT"
 gui.ResetOnSpawn = false
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,300,0,260)
-panel.Position = UDim2.new(0.5,-150,0.5,-130)
+panel.Size = UDim2.new(0,300,0,300)
+panel.Position = UDim2.new(0.5,-150,0.5,-150)
 panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
 Instance.new("UICorner", panel).CornerRadius = UDim.new(0,10)
 
@@ -119,21 +120,20 @@ toggleBtn.MouseButton1Click:Connect(function()
     panel.Visible = not panel.Visible
 end)
 
--- START
+-- START / STOP
 local start = Instance.new("TextButton", panel)
 start.Size = UDim2.new(0,120,0,35)
-start.Position = UDim2.new(0,10,1,-45)
+start.Position = UDim2.new(0,10,1,-55)
 start.Text = "START"
 start.BackgroundColor3 = Color3.fromRGB(40,200,80)
 
--- STOP
 local stop = Instance.new("TextButton", panel)
 stop.Size = UDim2.new(0,120,0,35)
-stop.Position = UDim2.new(1,-130,1,-45)
+stop.Position = UDim2.new(1,-130,1,-55)
 stop.Text = "STOP"
 stop.BackgroundColor3 = Color3.fromRGB(200,50,50)
 
--- FAST
+-- FAST BUTTON
 local fastBtn = Instance.new("TextButton", panel)
 fastBtn.Size = UDim2.new(0,120,0,30)
 fastBtn.Position = UDim2.new(0.5,-60,1,-120)
@@ -146,8 +146,41 @@ fastBtn.MouseButton1Click:Connect(function()
     fastBtn.Text = fastMode and "FAST ON" or "FAST OFF"
 end)
 
+-- WHITE SCREEN BUTTON
+local whiteBtn = Instance.new("TextButton", panel)
+whiteBtn.Size = UDim2.new(0,120,0,30)
+whiteBtn.Position = UDim2.new(0.5,-60,1,-160)
+whiteBtn.Text = "WHITE SCREEN OFF"
+whiteBtn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+whiteBtn.TextColor3 = Color3.fromRGB(0,0,0)
+
+whiteBtn.MouseButton1Click:Connect(function()
+    whiteScreenOn = not whiteScreenOn
+    whiteBtn.Text = whiteScreenOn and "WHITE SCREEN ON" or "WHITE SCREEN OFF"
+    if whiteScreenOn then
+        local frame = Instance.new("Frame", gui)
+        frame.Name = "WhiteOverlay"
+        frame.Size = UDim2.new(1,0,1,0)
+        frame.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        frame.ZIndex = 1000
+        frame.BackgroundTransparency = 0
+    else
+        local f = gui:FindFirstChild("WhiteOverlay")
+        if f then f:Destroy() end
+    end
+end)
+
 -- SPEED SLIDERS
-local function makeSlider(y, max, default, callback)
+local function makeSlider(y, max, default, callback, name)
+    local label = Instance.new("TextLabel", panel)
+    label.Size = UDim2.new(0,120,0,20)
+    label.Position = UDim2.new(0,10,y-20)
+    label.Text = name
+    label.TextColor3 = Color3.fromRGB(200,200,255)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 13
+
     local val = default
     local track = Instance.new("Frame", panel)
     track.Size = UDim2.new(1,-20,0,8)
@@ -181,8 +214,8 @@ local function makeSlider(y, max, default, callback)
     end)
 end
 
-makeSlider(50,20000,100,function(v) tweenSpeed=v end)
-makeSlider(90,10000,1000,function(v) tweenSpeed=v end)
+makeSlider(50,20000,100,function(v) tweenSpeed=v end, "Farm Speed")
+makeSlider(90,10000,1000,function(v) tweenSpeed=v end, "Escape Speed")
 
 -- LOOP FARM
 start.MouseButton1Click:Connect(function()
