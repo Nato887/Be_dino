@@ -5,8 +5,9 @@ local UserInputService  = game:GetService("UserInputService")
 local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
+if not player.Character then player.CharacterAdded:Wait() end
 
--- ===== CONFIG =====
+-- CONFIG
 local SAFE_Y = -50
 local DETECT_DISTANCE = 100
 
@@ -14,50 +15,50 @@ local running   = false
 local tweenSpeed = 100
 local moverConn  = nil
 
--- ===== CHARACTER =====
-local function getChar()
-    return player.Character or player.CharacterAdded:Wait()
-end
-
+-- ROOT
 local function getHRP()
-    local char = getChar()
-    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+    local char = player.Character
+    if not char then return nil end
+    for _, v in ipairs(char:GetChildren()) do
+        if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
+            return v
+        end
+    end
+    return char.PrimaryPart
 end
 
--- ===== FOOD =====
+-- FOOD
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
-
     local best, bestDist = nil, math.huge
     for _, food in CollectionService:GetTagged("Food") do
-        if food and food.Parent then
-            local pos = food:IsA("Model") and food:GetPivot().Position or food.Position
-            local d = (hrp.Position - pos).Magnitude
-            if d < bestDist then
-                bestDist = d
-                best = {instance = food, position = pos}
-            end
+        if not food or not food.Parent then continue end
+        local pos = food:IsA("Model") and food:GetPivot().Position or food.Position
+        local d = (hrp.Position - pos).Magnitude
+        if d < bestDist then
+            bestDist = d
+            best = { instance = food, position = pos }
         end
     end
     return best
 end
 
--- ===== GROWTH =====
+-- GROWTH
 local function getMyGrowth()
-    local char = getChar()
-    local g = char:FindFirstChild("Growth")
+    local char = player.Character
+    local g = char and char:FindFirstChild("Growth")
     return g and g.Value or 0
 end
 
--- ===== PLAYER AI (100 STUDS ONLY) =====
+-- PLAYER AI (FINAL LOGIC)
 local function getTargetPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
 
     local myGrowth = getMyGrowth()
-    local closest = nil
-    local closestDist = DETECT_DISTANCE
+    local huntTarget = nil
+    local huntDist = math.huge
 
     for _, plr in Players:GetPlayers() do
         if plr ~= player and plr.Character then
@@ -67,53 +68,55 @@ local function getTargetPlayer()
             if root and growth then
                 local dist = (hrp.Position - root.Position).Magnitude
 
-                if dist <= DETECT_DISTANCE and dist < closestDist then
-                    closestDist = dist
-                    closest = {
-                        pos = root.Position,
-                        growth = growth.Value
-                    }
+                -- 🔴 หนี (เฉพาะใหญ่กว่า + ใน 100)
+                if dist <= DETECT_DISTANCE and growth.Value > myGrowth then
+                    return "ESCAPE", root.Position
+                end
+
+                -- 🟢 ล่า (ตัวเล็กกว่า ทั้งแมพ)
+                if growth.Value < myGrowth and dist < huntDist then
+                    huntDist = dist
+                    huntTarget = root.Position
                 end
             end
         end
     end
 
-    if not closest then return nil end
-
-    if closest.growth > myGrowth then
-        return "ESCAPE", closest.pos
-    else
-        return "HUNT", closest.pos
+    if huntTarget then
+        return "HUNT", huntTarget
     end
+
+    return nil
 end
 
--- ===== MOVE =====
+-- MOVE
 local function stopMover()
-    if moverConn then moverConn:Disconnect() moverConn = nil end
+    if moverConn then moverConn:Disconnect(); moverConn = nil end
 end
 
-local function moveTo(pos)
+local function moveTo(targetPos)
+    local reached = false
     stopMover()
-
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
-        if not hrp or not running then return end
+        if not hrp or not running then reached = true; stopMover(); return end
 
         -- anti void
         if hrp.Position.Y < SAFE_Y then
             hrp.CFrame = CFrame.new(0,50,0)
         end
 
-        local diff = pos - hrp.Position
+        local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
+        if dist < 2 then reached = true; stopMover(); return end
 
-        if dist < 2 then stopMover() return end
-
-        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * math.min(tweenSpeed*dt, dist))
+        local step = math.min(tweenSpeed * dt, dist)
+        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
+    while not reached do task.wait(0.05) end
 end
 
--- ===== ANTI AFK =====
+-- ANTI AFK
 task.spawn(function()
     while true do
         task.wait(60)
@@ -122,101 +125,144 @@ task.spawn(function()
     end
 end)
 
--- ===== GUI =====
+-- GUI
 local gui = Instance.new("ScreenGui")
-gui.Name = "FoodCollector"
+gui.Name = "Be-Dino-Farm-NT"
 gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
--- toggle
-local toggle = Instance.new("TextButton", gui)
-toggle.Size = UDim2.new(0,100,0,30)
-toggle.Position = UDim2.new(0,10,0,10)
-toggle.Text = "OPEN"
+local toggleBtn = Instance.new("TextButton", gui)
+toggleBtn.Size = UDim2.new(0,120,0,32)
+toggleBtn.Position = UDim2.new(0,10,0,10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(20,20,20)
+toggleBtn.Text = "🦖 OPEN"
+toggleBtn.TextColor3 = Color3.fromRGB(0,255,120)
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,270,0,200)
-panel.Position = UDim2.new(0.5,-135,0.5,-100)
-panel.Visible = false
+panel.Size = UDim2.new(0,300,0,240)
+panel.Position = UDim2.new(0.5,-150,0.5,-120)
+panel.BackgroundColor3 = Color3.fromRGB(15,15,15)
 
-toggle.MouseButton1Click:Connect(function()
+toggleBtn.MouseButton1Click:Connect(function()
     panel.Visible = not panel.Visible
 end)
 
--- ===== MOBILE SLIDER =====
-local dragging = false
+-- TITLE
+local title = Instance.new("TextLabel", panel)
+title.Size = UDim2.new(1,0,0,40)
+title.BackgroundTransparency = 1
+title.Text = "🦖 Be-Dino-Farm-NT"
+title.TextColor3 = Color3.fromRGB(0,255,120)
 
-local function updateSlider(x)
-    local ratio = math.clamp((x - panel.AbsolutePosition.X)/200,0,1)
-    tweenSpeed = math.max(1, math.floor(ratio * 1000))
+-- STATUS
+local statusLbl = Instance.new("TextLabel", panel)
+statusLbl.Size = UDim2.new(1,-20,0,20)
+statusLbl.Position = UDim2.new(0,10,0,45)
+statusLbl.BackgroundTransparency = 1
+statusLbl.Text = "Status: Idle"
+
+local function setStatus(msg, color)
+    statusLbl.Text = "Status: " .. msg
+    statusLbl.TextColor3 = color or Color3.fromRGB(120,255,180)
 end
 
-UserInputService.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-    end
-end)
+-- SPEED
+local speedLbl = Instance.new("TextLabel", panel)
+speedLbl.Size = UDim2.new(1,-20,0,20)
+speedLbl.Position = UDim2.new(0,10,0,70)
+speedLbl.Text = "Speed: 100"
 
-UserInputService.InputEnded:Connect(function()
-    dragging = false
-end)
+-- SLIDER (10000)
+local track = Instance.new("Frame", panel)
+track.Size = UDim2.new(1,-20,0,8)
+track.Position = UDim2.new(0,10,0,100)
+
+local fill = Instance.new("Frame", track)
+fill.Size = UDim2.new(tweenSpeed/10000,0,1,0)
+
+local knob = Instance.new("TextButton", track)
+knob.Size = UDim2.new(0,18,0,18)
+
+local dragging = false
+
+knob.MouseButton1Down:Connect(function() dragging = true end)
+UserInputService.InputEnded:Connect(function() dragging = false end)
+
+local function updateSlider(x)
+    local ratio = math.clamp((x - track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+    tweenSpeed = math.max(1, math.floor(ratio * 10000))
+    fill.Size = UDim2.new(ratio,0,1,0)
+    knob.Position = UDim2.new(ratio,-9,0.5,-9)
+    speedLbl.Text = "Speed: " .. tweenSpeed
+end
 
 UserInputService.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.Touch then
-        updateSlider(input.Position.X)
-    end
+    if dragging then updateSlider(input.Position.X) end
 end)
 
--- ===== LOOP =====
-local function loop()
+UserInputService.TouchMoved:Connect(function(input)
+    if dragging then updateSlider(input.Position.X) end
+end)
+
+-- LOOP
+local function collectLoop()
     while running do
         local state, pos = getTargetPlayer()
 
         if state == "ESCAPE" then
+            setStatus("Escaping")
             local hrp = getHRP()
             local dir = (hrp.Position - pos).Unit
             moveTo(hrp.Position + dir * 100)
 
         elseif state == "HUNT" then
+            setStatus("Hunting")
             moveTo(pos)
 
         else
             local food = getClosestFood()
             if food then
+                setStatus("Collecting Food")
                 moveTo(food.position)
+            else
+                setStatus("Idle")
             end
         end
 
         task.wait(0.2)
     end
+    setStatus("Stopped")
 end
 
--- ===== BUTTON =====
-local start = Instance.new("TextButton", panel)
-start.Size = UDim2.new(0,100,0,40)
-start.Position = UDim2.new(0,10,1,-50)
-start.Text = "START"
+-- BUTTON
+local startBtn = Instance.new("TextButton", panel)
+startBtn.Size = UDim2.new(0,120,0,40)
+startBtn.Position = UDim2.new(0,15,1,-55)
+startBtn.Text = "START"
 
-local stop = Instance.new("TextButton", panel)
-stop.Size = UDim2.new(0,100,0,40)
-stop.Position = UDim2.new(1,-110,1,-50)
-stop.Text = "STOP"
+local stopBtn = Instance.new("TextButton", panel)
+stopBtn.Size = UDim2.new(0,120,0,40)
+stopBtn.Position = UDim2.new(1,-135,1,-55)
+stopBtn.Text = "STOP"
 
-start.MouseButton1Click:Connect(function()
+startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
-    task.spawn(loop)
+    setStatus("Running")
+    task.spawn(collectLoop)
 end)
 
-stop.MouseButton1Click:Connect(function()
+stopBtn.MouseButton1Click:Connect(function()
     running = false
     stopMover()
+    setStatus("Stopped")
 end)
 
--- ===== RESPAWN FIX =====
+-- RESPAWN
 player.CharacterAdded:Connect(function()
     task.wait(1)
-    if running then
-        task.spawn(loop)
-    end
+    if running then task.spawn(collectLoop) end
 end)
+
+-- DEFAULT
+setStatus("Idle")
