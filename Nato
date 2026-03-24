@@ -1,84 +1,163 @@
-local running = false
-local enabled = false
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
+local UserInputService  = game:GetService("UserInputService")
 
-local player = game:GetService("Players").LocalPlayer
-local tweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+if not player.Character then player.CharacterAdded:Wait() end
 
--- GUI
+local running    = false
+local tweenSpeed = 100
+local moverConn  = nil
+local targets    = {} -- 🔥 ล็อกเป้าหมาย
+
+-- ================= ROOT =================
+local function getHRP()
+    local char = player.Character
+    if not char then return nil end
+    for _, v in ipairs(char:GetChildren()) do
+        if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
+            return v
+        end
+    end
+    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+end
+
+-- ================= LOCK TARGET =================
+local function scanFood()
+	targets = {}
+	for _, food in ipairs(CollectionService:GetTagged("Food")) do
+		if food and food.Parent then
+			table.insert(targets, food)
+		end
+	end
+	print("ล็อกอาหาร:", #targets)
+end
+
+local function getPos(obj)
+	if obj:IsA("Model") then
+		return obj:GetPivot().Position
+	elseif obj:IsA("BasePart") then
+		return obj.Position
+	end
+end
+
+local function sortTargets(hrp)
+	table.sort(targets, function(a, b)
+		return (hrp.Position - getPos(a)).Magnitude <
+		       (hrp.Position - getPos(b)).Magnitude
+	end)
+end
+
+-- ================= MOVE =================
+local function stopMover()
+    if moverConn then moverConn:Disconnect(); moverConn = nil end
+end
+
+local function moveTo(targetPos)
+    local reached = false
+    stopMover()
+
+    moverConn = RunService.Heartbeat:Connect(function(dt)
+        local hrp = getHRP()
+        if not hrp or not running then reached = true; stopMover(); return end
+
+        local diff = targetPos - hrp.Position
+        local dist = diff.Magnitude
+
+        if dist < 2 then reached = true; stopMover(); return end
+
+        local step = math.min(tweenSpeed * dt, dist)
+        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
+    end)
+
+    while not reached do task.wait() end
+end
+
+-- ================= GUI =================
 local gui = Instance.new("ScreenGui")
-gui.Parent = player:WaitForChild("PlayerGui")
-gui.Name = "MeatFarmGUI"
-gui.ResetOnSpawn = false
+gui.Name           = "FoodCollector"
+gui.ResetOnSpawn   = false
+gui.Parent         = player:WaitForChild("PlayerGui")
 
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 200, 0, 120)
-frame.Position = UDim2.new(0, 20, 0, 200)
-frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
-Instance.new("UICorner", frame)
+local panel = Instance.new("Frame", gui)
+panel.Size = UDim2.new(0, 270, 0, 215)
+panel.Position = UDim2.new(0.5, -135, 0.5, -107)
+panel.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+panel.Active = true
+panel.Draggable = true
+Instance.new("UICorner", panel)
 
-local startBtn = Instance.new("TextButton", frame)
-startBtn.Size = UDim2.new(0.8,0,0,30)
-startBtn.Position = UDim2.new(0.1,0,0.4,0)
+local title = Instance.new("TextLabel", panel)
+title.Size = UDim2.new(1,0,0,30)
+title.Text = "🦖 Food Collector"
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.fromRGB(230,230,255)
+title.Font = Enum.Font.GothamBold
+
+local statusLbl = Instance.new("TextLabel", panel)
+statusLbl.Size = UDim2.new(1,-20,0,20)
+statusLbl.Position = UDim2.new(0,10,0,40)
+statusLbl.BackgroundTransparency = 1
+statusLbl.Text = "Status: Idle"
+statusLbl.TextColor3 = Color3.fromRGB(150,150,180)
+
+local startBtn = Instance.new("TextButton", panel)
+startBtn.Size = UDim2.new(0.4,0,0,30)
+startBtn.Position = UDim2.new(0.1,0,0.75,0)
 startBtn.Text = "START"
 startBtn.BackgroundColor3 = Color3.fromRGB(0,200,0)
 
-local stopBtn = Instance.new("TextButton", frame)
-stopBtn.Size = UDim2.new(0.8,0,0,30)
-stopBtn.Position = UDim2.new(0.1,0,0.7,0)
+local stopBtn = Instance.new("TextButton", panel)
+stopBtn.Size = UDim2.new(0.4,0,0,30)
+stopBtn.Position = UDim2.new(0.5,0,0.75,0)
 stopBtn.Text = "STOP"
-stopBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+stopBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
 
+-- ================= STATUS =================
+local function setStatus(msg, color)
+	statusLbl.Text = "Status: "..msg
+	statusLbl.TextColor3 = color or Color3.fromRGB(150,150,180)
+end
+
+-- ================= LOOP =================
+local function collectLoop()
+	while running do
+		local char = player.Character or player.CharacterAdded:Wait()
+		local hrp = getHRP()
+		if not hrp then task.wait(1) continue end
+
+		-- 🔥 ล็อก + เรียง
+		scanFood()
+		sortTargets(hrp)
+
+		for _, food in ipairs(targets) do
+			if not running then break end
+			
+			if food and food.Parent then
+				local pos = getPos(food)
+				if pos then
+					setStatus("เก็บ: "..food.Name, Color3.fromRGB(90,200,90))
+					moveTo(pos)
+				end
+			end
+		end
+
+		task.wait(0.1)
+	end
+	setStatus("Stopped")
+end
+
+-- ================= BUTTON =================
 startBtn.MouseButton1Click:Connect(function()
-	enabled = true
-	print("START แล้ว") -- debug
+	if running then return end
+	running = true
+	setStatus("Running", Color3.fromRGB(90,200,90))
+	task.spawn(collectLoop)
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
-	enabled = false
-end)
-
--- Tween
-local function tweenTo(root, cf)
-	local tween = tweenService:Create(
-		root,
-		TweenInfo.new(0.015, Enum.EasingStyle.Linear),
-		{CFrame = cf}
-	)
-	tween:Play()
-	tween.Completed:Wait()
-end
-
--- หา meat แบบชัวร์
-local function getMeats()
-	local meats = {}
-	for _, v in ipairs(workspace:GetDescendants()) do -- 🔥 ดีกว่า GetChildren
-		if v:IsA("BasePart") and v.Name:lower():find("meat") then
-			table.insert(meats, v)
-		end
-	end
-	return meats
-end
-
--- loop หลัก
-task.spawn(function()
-	while true do
-		if enabled and not running then
-			running = true
-			
-			local char = player.Character or player.CharacterAdded:Wait()
-			local root = char:WaitForChild("HumanoidRootPart")
-
-			local meats = getMeats()
-			print("เจอ meat:", #meats) -- debug
-			
-			for _, target in ipairs(meats) do
-				if not enabled then break end
-				tweenTo(root, target.CFrame)
-			end
-			
-			running = false
-		end
-		
-		task.wait(0.1)
-	end
+	running = false
+	stopMover()
+	setStatus("Stopped")
 end)
