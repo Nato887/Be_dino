@@ -27,12 +27,14 @@ local function getHRP()
         or char.PrimaryPart
 end
 
--- FAST MODE: ลบแมพเต็มแมพ
+-- FAST MODE: ลบ obstacle แต่ไม่ลบพื้น
 local function optimizeMap(enable)
     for _,v in pairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") or v:IsA("MeshPart") then
             local name = string.lower(v.Name)
             local parentName = v.Parent and string.lower(v.Parent.Name) or ""
+            -- ไม่ลบพื้น/plateau/terrain
+            if name:find("floor") or name:find("terrain") then continue end
             if name:find("tree") or name:find("rock") or name:find("mountain") or name:find("bush")
             or parentName:find("tree") or parentName:find("rock") or parentName:find("mountain") or parentName:find("bush") then
                 if enable then
@@ -121,7 +123,10 @@ local function moveTo(targetPos)
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
         if not hrp or not running then return end
-        if hrp.Position.Y < SAFE_Y then hrp.CFrame = CFrame.new(0,50,0) end
+        -- Anti-Void
+        if hrp.Position.Y < SAFE_Y then
+            hrp.CFrame = CFrame.new(hrp.Position.X,50,hrp.Position.Z)
+        end
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
         if dist < 3 then return end
@@ -273,25 +278,27 @@ end)
 -- RESPAWN
 player.CharacterAdded:Connect(function()
     task.wait(1)
-    if running then task.spawn(function() while running do
-        local state, target = getTargetPlayer()
-        if state == "ESCAPE" then
-            local hrp = getHRP()
-            local dir = (hrp.Position - target).Unit
-            moveTo(hrp.Position + dir * 200)
-        elseif state == "HUNT" and target then
-            stopMover()
-            moverConn = RunService.Heartbeat:Connect(function()
+    if running then task.spawn(function()
+        while running do
+            local state, target = getTargetPlayer()
+            if state == "ESCAPE" then
                 local hrp = getHRP()
-                if not hrp then return end
-                hrp.CFrame = CFrame.new(target.Position + Vector3.new(0,2,0))
-            end)
-        else
-            local food = getClosestFood()
-            if food then moveTo(food.position) end
+                local dir = (hrp.Position - target).Unit
+                moveTo(hrp.Position + dir * 200)
+            elseif state == "HUNT" and target then
+                stopMover()
+                moverConn = RunService.Heartbeat:Connect(function()
+                    local hrp = getHRP()
+                    if not hrp then return end
+                    hrp.CFrame = CFrame.new(target.Position + Vector3.new(0,2,0))
+                end)
+            else
+                local food = getClosestFood()
+                if food then moveTo(food.position) end
+            end
+            task.wait(updateRate)
         end
-        task.wait(updateRate)
-    end end) end
+    end) end
 end)
 
 -- DEFAULT STATUS
