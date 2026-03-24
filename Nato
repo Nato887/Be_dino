@@ -9,23 +9,10 @@ if not player.Character then player.CharacterAdded:Wait() end
 
 -- CONFIG
 local SAFE_Y = -50
-local DETECT_DISTANCE = 200
-local ESCAPE_DISTANCE = 300
-
 local running = false
 local tweenSpeed = 100
-local escapeSpeed = 2000
-local moverConn = nil
 local fastMode = false
 local updateRate = 0.05
-
--- WHITE SCREEN
-local whiteScreen = Instance.new("Frame")
-whiteScreen.Size = UDim2.new(1,0,1,0)
-whiteScreen.BackgroundColor3 = Color3.new(1,1,1)
-whiteScreen.BackgroundTransparency = 1
-whiteScreen.ZIndex = 999
-whiteScreen.Parent = player:WaitForChild("PlayerGui")
 
 -- ROOT
 local function getHRP()
@@ -70,34 +57,8 @@ local function getClosestFood()
     return best
 end
 
--- ESCAPE CHECK
-local function getEscapePlayer()
-    local hrp = getHRP()
-    if not hrp then return nil end
-
-    local myGrowth = player.Character:FindFirstChild("Growth") and player.Character.Growth.Value or 0
-
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            local root = p.Character:FindFirstChild("HumanoidRootPart")
-            local growth = p.Character:FindFirstChild("Growth")
-            if root and growth then
-                local d = (hrp.Position - root.Position).Magnitude
-                if d <= DETECT_DISTANCE and growth.Value > myGrowth then
-                    return root
-                end
-            end
-        end
-    end
-end
-
-local function getEscapePos(enemy)
-    local hrp = getHRP()
-    local dir = (hrp.Position - enemy.Position).Unit
-    return hrp.Position + dir * ESCAPE_DISTANCE
-end
-
 -- MOVE
+local moverConn
 local function stopMover()
     if moverConn then moverConn:Disconnect() moverConn = nil end
 end
@@ -107,25 +68,13 @@ local function moveTo(pos)
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
         if not hrp or not running then return end
-
-        if hrp.Position.Y < SAFE_Y then
-            hrp.CFrame = CFrame.new(hrp.Position.X,50,hrp.Position.Z)
-        end
-
+        if hrp.Position.Y < SAFE_Y then hrp.CFrame = CFrame.new(hrp.Position.X,50,hrp.Position.Z) end
         local diff = pos - hrp.Position
         local dist = diff.Magnitude
         if dist < 3 then return end
-
         local step = math.min(tweenSpeed * dt, dist)
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
-end
-
-local function moveToEscape(pos)
-    local old = tweenSpeed
-    tweenSpeed = escapeSpeed
-    moveTo(pos)
-    tweenSpeed = old
 end
 
 -- ANTI AFK
@@ -146,6 +95,7 @@ local panel = Instance.new("Frame", gui)
 panel.Size = UDim2.new(0,300,0,260)
 panel.Position = UDim2.new(0.5,-150,0.5,-130)
 panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0,10)
 
 -- TITLE
 local title = Instance.new("TextLabel", panel)
@@ -153,6 +103,21 @@ title.Size = UDim2.new(1,0,0,30)
 title.Text = "🦖 Be-Dino-Farm-NT"
 title.BackgroundColor3 = Color3.fromRGB(25,25,50)
 title.TextColor3 = Color3.fromRGB(150,255,150)
+
+-- OPEN/CLOSE BUTTON
+local toggleBtn = Instance.new("TextButton", gui)
+toggleBtn.Size = UDim2.new(0,120,0,32)
+toggleBtn.Position = UDim2.new(0,10,0,10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(35,120,40)
+toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+toggleBtn.Text = "🦖 OPEN"
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.TextSize = 14
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0,6)
+
+toggleBtn.MouseButton1Click:Connect(function()
+    panel.Visible = not panel.Visible
+end)
 
 -- START
 local start = Instance.new("TextButton", panel)
@@ -168,19 +133,6 @@ stop.Position = UDim2.new(1,-130,1,-45)
 stop.Text = "STOP"
 stop.BackgroundColor3 = Color3.fromRGB(200,50,50)
 
--- WHITE
-local whiteBtn = Instance.new("TextButton", panel)
-whiteBtn.Size = UDim2.new(0,120,0,30)
-whiteBtn.Position = UDim2.new(0.5,-60,1,-85)
-whiteBtn.Text = "WHITE OFF"
-whiteBtn.BackgroundColor3 = Color3.fromRGB(200,200,255)
-
-whiteBtn.MouseButton1Click:Connect(function()
-    local on = whiteScreen.BackgroundTransparency == 1
-    whiteScreen.BackgroundTransparency = on and 0 or 1
-    whiteBtn.Text = on and "WHITE ON" or "WHITE OFF"
-end)
-
 -- FAST
 local fastBtn = Instance.new("TextButton", panel)
 fastBtn.Size = UDim2.new(0,120,0,30)
@@ -194,24 +146,30 @@ fastBtn.MouseButton1Click:Connect(function()
     fastBtn.Text = fastMode and "FAST ON" or "FAST OFF"
 end)
 
--- FARM SPEED SLIDER
+-- SPEED SLIDERS
 local function makeSlider(y, max, default, callback)
     local val = default
     local track = Instance.new("Frame", panel)
     track.Size = UDim2.new(1,-20,0,8)
     track.Position = UDim2.new(0,10,0,y)
+    track.BackgroundColor3 = Color3.fromRGB(50,50,75)
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1,0)
 
     local fill = Instance.new("Frame", track)
     fill.Size = UDim2.new(default/max,0,1,0)
+    fill.BackgroundColor3 = Color3.fromRGB(90,255,100)
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1,0)
 
     local knob = Instance.new("TextButton", track)
     knob.Size = UDim2.new(0,18,0,18)
     knob.Position = UDim2.new(default/max,-9,0.5,-9)
+    knob.BackgroundColor3 = Color3.fromRGB(220,220,255)
+    knob.Text = ""
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
 
     local dragging = false
     knob.MouseButton1Down:Connect(function() dragging = true end)
-    UserInputService.InputEnded:Connect(function() dragging = false end)
-
+    UserInputService.InputEnded:Connect(function(i) dragging = false end)
     UserInputService.InputChanged:Connect(function(i)
         if dragging then
             local r = math.clamp((i.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
@@ -224,20 +182,15 @@ local function makeSlider(y, max, default, callback)
 end
 
 makeSlider(50,20000,100,function(v) tweenSpeed=v end)
-makeSlider(90,10000,2000,function(v) escapeSpeed=v end)
+makeSlider(90,10000,1000,function(v) tweenSpeed=v end) -- slider หนีไม่ระบุชื่อ
 
--- LOOP
+-- LOOP FARM
 start.MouseButton1Click:Connect(function()
     running = true
     task.spawn(function()
         while running do
-            local enemy = getEscapePlayer()
-            if enemy then
-                moveToEscape(getEscapePos(enemy))
-            else
-                local food = getClosestFood()
-                if food then moveTo(food) end
-            end
+            local food = getClosestFood()
+            if food then moveTo(food) end
             task.wait(updateRate)
         end
     end)
