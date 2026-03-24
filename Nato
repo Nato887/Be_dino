@@ -14,19 +14,26 @@ local settings = {
     antiVoid = true,
     antiAFK = true,
     autoBoss = false,
-    tweenSpeed = 150, -- Default
+    tweenSpeed = 150,
 }
 
--- ── Function Get Growth (Volume-based) ──
-local function getGrowth(char)
-    if not char then return 0 end
-    local root = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
-    return root and (root.Size.X * root.Size.Y * root.Size.Z) or 0
-end
-
+-- ── Get the REAL root (จากโค้ดเป้าหมายของคุณ) ──
 local function getHRP()
     local char = player.Character
-    return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+    if not char then return nil end
+    for _, v in ipairs(char:GetChildren()) do
+        if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
+            return v
+        end
+    end
+    return char.PrimaryPart
+end
+
+-- ── ฟังก์ชันดึงค่า Growth (Volume-based) ──
+local function getGrowth(char)
+    if not char then return 0 end
+    local root = char:FindFirstChild("RootPart") or char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+    return root and (root.Size.X * root.Size.Y * root.Size.Z) or 0
 end
 
 -- ================= GUI DESIGN (Premium Dark) =================
@@ -68,7 +75,7 @@ local sLab = Instance.new("TextLabel", sCont); sLab.Size = UDim2.new(1, 0, 0, 20
 local track = Instance.new("Frame", sCont); track.Size = UDim2.new(1, -20, 0, 8); track.Position = UDim2.new(0, 10, 0, 35); track.BackgroundColor3 = Color3.fromRGB(45, 45, 70); Instance.new("UICorner", track)
 local knob = Instance.new("Frame", track); knob.Size = UDim2.new(0, 22, 0, 22); knob.Position = UDim2.new(settings.tweenSpeed/300, -11, 0.5, -11); knob.BackgroundColor3 = Color3.new(1,1,1); Instance.new("UICorner", knob)
 
--- Slider Logic (Mobile/PC)
+-- Slider Logic (Mobile Optimized)
 local drag = false
 local function updateS(input)
     local r = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
@@ -105,7 +112,7 @@ RunService.Heartbeat:Connect(function(dt)
     if settings.avoidPlayers then
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player and p.Character then
-                local eR = p.Character:FindFirstChild("HumanoidRootPart")
+                local eR = p.Character:FindFirstChild("RootPart") or p.Character:FindFirstChild("HumanoidRootPart")
                 if eR and (hrp.Position - eR.Position).Magnitude < 150 and getGrowth(p.Character) > myG then
                     local eDir = (hrp.Position - eR.Position).Unit
                     local nextP = hrp.Position + (eDir * settings.tweenSpeed * dt)
@@ -116,38 +123,43 @@ RunService.Heartbeat:Connect(function(dt)
     end
 
     -- 🦖 Hunt (Target Growth >= 10,000)
-    local target = nil
+    local targetPos = nil
     if settings.huntWeaker then
         local nD = math.huge
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player and p.Character then
-                local eR = p.Character:FindFirstChild("HumanoidRootPart")
+                local eR = p.Character:FindFirstChild("RootPart") or p.Character:FindFirstChild("HumanoidRootPart")
                 local eG = getGrowth(p.Character)
-                if eR and eG < myG and eG >= 10000 then -- เงื่อนไข 10k
+                if eR and eG < myG and eG >= 10000 then 
                     local dist = (hrp.Position - eR.Position).Magnitude
-                    if dist < nD then nD = dist; target = eR end
+                    if dist < nD then nD = dist; targetPos = eR.Position end
                 end
             end
         end
     end
 
-    -- 🍖 Food
-    if not target and settings.autoFood then
-        local nD = math.huge
-        for _, v in ipairs(CollectionService:GetTagged("Food")) do
-            if v and v.Parent and v:IsA("BasePart") then
-                local dist = (hrp.Position - v.Position).Magnitude
-                if dist < nD then nD = dist; target = v end
+    -- 🍖 Food (จากโค้ดเป้าหมายของคุณ)
+    if not targetPos and settings.autoFood then
+        local bestDist = math.huge
+        for _, food in ipairs(CollectionService:GetTagged("Food")) do
+            if not food or not food.Parent then continue end
+            local ok, pos = pcall(function()
+                if food:IsA("Model") then return food:GetPivot().Position
+                elseif food:IsA("BasePart") then return food.Position end
+            end)
+            if ok and pos then
+                local d = (hrp.Position - pos).Magnitude
+                if d < bestDist then bestDist = d; targetPos = pos end
             end
         end
     end
 
     -- Movement Execution
-    if target then
-        local tPos = (target:IsA("Model") and target:GetPivot().Position) or target.Position
-        local mDir = (tPos - hrp.Position).Unit
+    if targetPos then
+        local diff = targetPos - hrp.Position
+        local mDir = diff.Unit
         local nextS = hrp.Position + (mDir * settings.tweenSpeed * dt)
-        if isFloor(nextS) then hrp.CFrame = CFrame.new(nextS, tPos); hrp.Velocity = Vector3.new(0, 0.1, 0) end
+        if isFloor(nextS) then hrp.CFrame = CFrame.new(nextS, targetPos); hrp.Velocity = Vector3.new(0, 0.1, 0) end
     end
 end)
 
