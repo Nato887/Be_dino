@@ -1,25 +1,28 @@
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
-local UserInputService  = game:GetService("UserInputService")
-local VirtualUser       = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
 -- CONFIG
 local SAFE_Y = -50
-local DETECT_DISTANCE = 200 -- หนีผู้เล่นใหญ่ในระยะ 200 studs
-local running   = false
+local DETECT_DISTANCE = 200
+local ESCAPE_DISTANCE = 300
+
+local running = false
 local tweenSpeed = 100
-local moverConn  = nil
-local fastMode   = false
+local escapeSpeed = 2000
+local moverConn = nil
+local fastMode = false
 local updateRate = 0.05
 
 -- WHITE SCREEN
 local whiteScreen = Instance.new("Frame")
 whiteScreen.Size = UDim2.new(1,0,1,0)
-whiteScreen.BackgroundColor3 = Color3.fromRGB(255,255,255)
+whiteScreen.BackgroundColor3 = Color3.new(1,1,1)
 whiteScreen.BackgroundTransparency = 1
 whiteScreen.ZIndex = 999
 whiteScreen.Parent = player:WaitForChild("PlayerGui")
@@ -28,29 +31,24 @@ whiteScreen.Parent = player:WaitForChild("PlayerGui")
 local function getHRP()
     local char = player.Character
     if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart")
-        or char:FindFirstChild("RootPart")
-        or char.PrimaryPart
+    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- FAST MODE: ลบ obstacle แต่ไม่ลบพื้น
-local function optimizeMap(enable)
-    for _,v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") or v:IsA("MeshPart") then
-            local name = string.lower(v.Name)
-            local parentName = v.Parent and string.lower(v.Parent.Name) or ""
-            if name:find("floor") or name:find("terrain") then continue end
-            if name:find("tree") or name:find("rock") or name:find("mountain") or name:find("bush")
-            or parentName:find("tree") or parentName:find("rock") or parentName:find("mountain") or parentName:find("bush") then
-                if enable then
-                    v.LocalTransparencyModifier = 1
-                    v.CanCollide = false
-                else
-                    v.LocalTransparencyModifier = 0
-                    v.CanCollide = true
+-- FAST MODE LOOP
+local function optimizeMapLoop()
+    while fastMode do
+        for _,v in pairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") or v:IsA("MeshPart") then
+                local n = v.Name:lower()
+                if not n:find("floor") and not n:find("terrain") then
+                    if n:find("tree") or n:find("rock") or n:find("mountain") or n:find("bush") then
+                        v.LocalTransparencyModifier = 1
+                        v.CanCollide = false
+                    end
                 end
             end
         end
+        task.wait(0.1)
     end
 end
 
@@ -58,60 +56,76 @@ end
 local function getClosestFood()
     local hrp = getHRP()
     if not hrp then return nil end
-    local best, bestDist = nil, math.huge
-    for _, food in CollectionService:GetTagged("Food") do
-        if not food or not food.Parent then continue end
-        local pos = food:IsA("Model") and food:GetPivot().Position or food.Position
-        local d = (hrp.Position - pos).Magnitude
-        if d < bestDist then
-            bestDist = d
-            best = { instance = food, position = pos }
+    local best, dist = nil, math.huge
+    for _,f in CollectionService:GetTagged("Food") do
+        if f and f.Parent then
+            local pos = f:IsA("Model") and f:GetPivot().Position or f.Position
+            local d = (hrp.Position - pos).Magnitude
+            if d < dist then
+                dist = d
+                best = pos
+            end
         end
     end
     return best
 end
 
--- ESCAPE: หนีผู้เล่นใหญ่
+-- ESCAPE CHECK
 local function getEscapePlayer()
     local hrp = getHRP()
     if not hrp then return nil end
+
     local myGrowth = player.Character:FindFirstChild("Growth") and player.Character.Growth.Value or 0
 
-    local escapeTarget = nil
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character then
-            local root = plr.Character:FindFirstChild("HumanoidRootPart")
-                or plr.Character:FindFirstChild("RootPart")
-                or plr.Character.PrimaryPart
-            local growth = plr.Character:FindFirstChild("Growth")
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            local growth = p.Character:FindFirstChild("Growth")
             if root and growth then
-                local dist = (hrp.Position - root.Position).Magnitude
-                if dist <= DETECT_DISTANCE and growth.Value > myGrowth then
-                    escapeTarget = root
+                local d = (hrp.Position - root.Position).Magnitude
+                if d <= DETECT_DISTANCE and growth.Value > myGrowth then
+                    return root
                 end
             end
         end
     end
-    return escapeTarget
+end
+
+local function getEscapePos(enemy)
+    local hrp = getHRP()
+    local dir = (hrp.Position - enemy.Position).Unit
+    return hrp.Position + dir * ESCAPE_DISTANCE
 end
 
 -- MOVE
 local function stopMover()
-    if moverConn then moverConn:Disconnect(); moverConn = nil end
+    if moverConn then moverConn:Disconnect() moverConn = nil end
 end
 
-local function moveTo(targetPos)
+local function moveTo(pos)
     stopMover()
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
         if not hrp or not running then return end
-        if hrp.Position.Y < SAFE_Y then hrp.CFrame = CFrame.new(hrp.Position.X,50,hrp.Position.Z) end
-        local diff = targetPos - hrp.Position
+
+        if hrp.Position.Y < SAFE_Y then
+            hrp.CFrame = CFrame.new(hrp.Position.X,50,hrp.Position.Z)
+        end
+
+        local diff = pos - hrp.Position
         local dist = diff.Magnitude
         if dist < 3 then return end
+
         local step = math.min(tweenSpeed * dt, dist)
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
+end
+
+local function moveToEscape(pos)
+    local old = tweenSpeed
+    tweenSpeed = escapeSpeed
+    moveTo(pos)
+    tweenSpeed = old
 end
 
 -- ANTI AFK
@@ -120,140 +134,118 @@ task.spawn(function()
         task.wait(30)
         VirtualUser:CaptureController()
         VirtualUser:ClickButton2(Vector2.new())
-        VirtualUser:ClickButton1(Vector2.new())
     end
 end)
 
 -- GUI
-local gui = Instance.new("ScreenGui")
+local gui = Instance.new("ScreenGui", player.PlayerGui)
 gui.Name = "Be-Dino-Farm-NT"
 gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
-
-local toggleBtn = Instance.new("TextButton", gui)
-toggleBtn.Size = UDim2.new(0,120,0,32)
-toggleBtn.Position = UDim2.new(0,10,0,10)
-toggleBtn.Text = "🦖 OPEN"
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,300,0,220)
-panel.Position = UDim2.new(0.5,-150,0.5,-110)
-panel.BackgroundColor3 = Color3.fromRGB(15,15,15)
+panel.Size = UDim2.new(0,300,0,260)
+panel.Position = UDim2.new(0.5,-150,0.5,-130)
+panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
 
-toggleBtn.MouseButton1Click:Connect(function()
-    panel.Visible = not panel.Visible
+-- TITLE
+local title = Instance.new("TextLabel", panel)
+title.Size = UDim2.new(1,0,0,30)
+title.Text = "🦖 Be-Dino-Farm-NT"
+title.BackgroundColor3 = Color3.fromRGB(25,25,50)
+title.TextColor3 = Color3.fromRGB(150,255,150)
+
+-- START
+local start = Instance.new("TextButton", panel)
+start.Size = UDim2.new(0,120,0,35)
+start.Position = UDim2.new(0,10,1,-45)
+start.Text = "START"
+start.BackgroundColor3 = Color3.fromRGB(40,200,80)
+
+-- STOP
+local stop = Instance.new("TextButton", panel)
+stop.Size = UDim2.new(0,120,0,35)
+stop.Position = UDim2.new(1,-130,1,-45)
+stop.Text = "STOP"
+stop.BackgroundColor3 = Color3.fromRGB(200,50,50)
+
+-- WHITE
+local whiteBtn = Instance.new("TextButton", panel)
+whiteBtn.Size = UDim2.new(0,120,0,30)
+whiteBtn.Position = UDim2.new(0.5,-60,1,-85)
+whiteBtn.Text = "WHITE OFF"
+whiteBtn.BackgroundColor3 = Color3.fromRGB(200,200,255)
+
+whiteBtn.MouseButton1Click:Connect(function()
+    local on = whiteScreen.BackgroundTransparency == 1
+    whiteScreen.BackgroundTransparency = on and 0 or 1
+    whiteBtn.Text = on and "WHITE ON" or "WHITE OFF"
 end)
 
--- STATUS
-local statusLbl = Instance.new("TextLabel", panel)
-statusLbl.Size = UDim2.new(1,-20,0,20)
-statusLbl.Position = UDim2.new(0,10,0,45)
-statusLbl.Text = "Status: Idle"
-local function setStatus(msg) statusLbl.Text = "Status: " .. msg end
-
--- SPEED SLIDER
-local speedLbl = Instance.new("TextLabel", panel)
-speedLbl.Size = UDim2.new(1,-20,0,20)
-speedLbl.Position = UDim2.new(0,10,0,70)
-speedLbl.Text = "Speed: 100"
-
-local track = Instance.new("Frame", panel)
-track.Size = UDim2.new(1,-20,0,8)
-track.Position = UDim2.new(0,10,0,100)
-local fill = Instance.new("Frame", track)
-fill.Size = UDim2.new(tweenSpeed/20000,0,1,0)
-local knob = Instance.new("TextButton", track)
-knob.Size = UDim2.new(0,18,0,18)
-local dragging = false
-knob.MouseButton1Down:Connect(function() dragging = true end)
-UserInputService.InputEnded:Connect(function() dragging = false end)
-local function updateSlider(x)
-    local ratio = math.clamp((x - track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
-    tweenSpeed = math.max(1, math.floor(ratio * 20000))
-    fill.Size = UDim2.new(ratio,0,1,0)
-    knob.Position = UDim2.new(ratio,-9,0.5,-9)
-    speedLbl.Text = "Speed: " .. tweenSpeed
-end
-UserInputService.InputChanged:Connect(function(input) if dragging then updateSlider(input.Position.X) end end)
-UserInputService.TouchMoved:Connect(function(input) if dragging then updateSlider(input.Position.X) end end)
-
--- FAST BUTTON (White Screen + ลบ obstacle)
+-- FAST
 local fastBtn = Instance.new("TextButton", panel)
-fastBtn.Size = UDim2.new(0,120,0,40)
-fastBtn.Position = UDim2.new(0.5,-60,1,-60)
-fastBtn.Text = "⚡ FAST: OFF"
+fastBtn.Size = UDim2.new(0,120,0,30)
+fastBtn.Position = UDim2.new(0.5,-60,1,-120)
+fastBtn.Text = "FAST OFF"
+fastBtn.BackgroundColor3 = Color3.fromRGB(0,255,120)
+
 fastBtn.MouseButton1Click:Connect(function()
     fastMode = not fastMode
-    if fastMode then
-        updateRate = 0.02
-        optimizeMap(true)
-        whiteScreen.BackgroundTransparency = 0
-    else
-        updateRate = 0.05
-        optimizeMap(false)
-        whiteScreen.BackgroundTransparency = 1
-    end
-    fastBtn.Text = fastMode and "⚡ FAST: ON" or "⚡ FAST: OFF"
+    if fastMode then task.spawn(optimizeMapLoop) end
+    fastBtn.Text = fastMode and "FAST ON" or "FAST OFF"
 end)
 
--- START / STOP
-local startBtn = Instance.new("TextButton", panel)
-startBtn.Size = UDim2.new(0,120,0,40)
-startBtn.Position = UDim2.new(0,15,1,-15)
-startBtn.Text = "START"
-local stopBtn = Instance.new("TextButton", panel)
-stopBtn.Size = UDim2.new(0,120,0,40)
-stopBtn.Position = UDim2.new(1,-135,1,-15)
-stopBtn.Text = "STOP"
+-- FARM SPEED SLIDER
+local function makeSlider(y, max, default, callback)
+    local val = default
+    local track = Instance.new("Frame", panel)
+    track.Size = UDim2.new(1,-20,0,8)
+    track.Position = UDim2.new(0,10,0,y)
 
-startBtn.MouseButton1Click:Connect(function()
-    if running then return end
+    local fill = Instance.new("Frame", track)
+    fill.Size = UDim2.new(default/max,0,1,0)
+
+    local knob = Instance.new("TextButton", track)
+    knob.Size = UDim2.new(0,18,0,18)
+    knob.Position = UDim2.new(default/max,-9,0.5,-9)
+
+    local dragging = false
+    knob.MouseButton1Down:Connect(function() dragging = true end)
+    UserInputService.InputEnded:Connect(function() dragging = false end)
+
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging then
+            local r = math.clamp((i.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+            val = math.floor(r*max)
+            fill.Size = UDim2.new(r,0,1,0)
+            knob.Position = UDim2.new(r,-9,0.5,-9)
+            callback(val)
+        end
+    end)
+end
+
+makeSlider(50,20000,100,function(v) tweenSpeed=v end)
+makeSlider(90,10000,2000,function(v) escapeSpeed=v end)
+
+-- LOOP
+start.MouseButton1Click:Connect(function()
     running = true
     task.spawn(function()
         while running do
-            local escape = getEscapePlayer()
-            if escape then
-                setStatus("ESCAPING")
-                local hrp = getHRP()
-                local dir = (hrp.Position - escape.Position).Unit
-                moveTo(hrp.Position + dir * 200)
+            local enemy = getEscapePlayer()
+            if enemy then
+                moveToEscape(getEscapePos(enemy))
             else
                 local food = getClosestFood()
-                if food then
-                    setStatus("FARMING")
-                    moveTo(food.position)
-                else
-                    setStatus("IDLE")
-                end
+                if food then moveTo(food) end
             end
             task.wait(updateRate)
         end
     end)
 end)
 
-stopBtn.MouseButton1Click:Connect(function()
+stop.MouseButton1Click:Connect(function()
     running = false
     stopMover()
 end)
 
--- RESPAWN
-player.CharacterAdded:Connect(function()
-    task.wait(1)
-    if running then task.spawn(function()
-        while running do
-            local escape = getEscapePlayer()
-            if escape then
-                local hrp = getHRP()
-                local dir = (hrp.Position - escape.Position).Unit
-                moveTo(hrp.Position + dir * 200)
-            else
-                local food = getClosestFood()
-                if food then moveTo(food.position) end
-            end
-            task.wait(updateRate)
-        end
-    end) end
-end)
-
--- DEFAULT STATUS
-setStatus("Idle")
+setStatus = function() end -- กัน error
