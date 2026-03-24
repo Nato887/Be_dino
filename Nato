@@ -20,7 +20,7 @@ local settings = {
     tweenSpeed = 150,
 }
 
--- ── Get the REAL root (Targeting Logic จากโค้ดที่คุณส่งมา) ──
+-- ── Get the REAL root (Targeting Logic จากโค้ดเป้าหมาย) ──
 local function getHRP()
     local char = player.Character
     if not char then return nil end
@@ -32,7 +32,7 @@ local function getHRP()
     return char.PrimaryPart
 end
 
--- ── Get Growth (Volume-based) ──
+-- ── Get Growth ──
 local function getGrowth(char)
     if not char then return 0 end
     local root = char:FindFirstChild("RootPart") or char:FindFirstChild("HumanoidRootPart")
@@ -41,7 +41,7 @@ end
 
 -- ================= GUI DESIGN (Premium Redesign) =================
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "NatoHub_V20_Final"; gui.ResetOnSpawn = false
+gui.Name = "NatoHub_V20_Fixed"; gui.ResetOnSpawn = false
 
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 520, 0, 340); main.Position = UDim2.new(0.5, -260, 0.5, -170)
@@ -69,7 +69,6 @@ for name, frame in pairs(tabs) do
     local layout = Instance.new("UIListLayout", frame); layout.Padding = UDim.new(0, 10); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 end
 
--- Tab Buttons Logic
 local function showTab(tName) 
     for n, f in pairs(tabs) do f.Visible = (n == tName) end 
 end
@@ -90,10 +89,10 @@ local function createTabBtn(n, y, t, icon)
     end)
 end
 
-createTabBtn("Auto Feed", 60, "Tab1", "rbxassetid://6031215981")
+createTabBtn("Automation", 60, "Tab1", "rbxassetid://6031215981")
 createTabBtn("Boss/Misc", 105, "Tab2", "rbxassetid://6031215981")
 
--- ================= TAB 1: AUTOMATION (Speed Limit 300) =================
+-- ================= TAB 1: AUTOMATION =================
 local function createToggle(p, n, pr)
     local b = Instance.new("TextButton", p)
     b.Size = UDim2.new(0.95, 0, 0, 45); b.BackgroundColor3 = settings[pr] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(30, 25, 50); b.Text = "   "..n; b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamMedium; b.TextXAlignment = Enum.TextXAlignment.Left; Instance.new("UICorner", b)
@@ -103,11 +102,13 @@ local function createToggle(p, n, pr)
     end)
 end
 
+-- เพิ่มปุ่มที่หายไปกลับมา
+createToggle(tabs.Tab1, "Auto Food (Tween)", "autoFood")
 createToggle(tabs.Tab1, "Hunt Smaller (10k+)", "huntWeaker")
 createToggle(tabs.Tab1, "Avoid Bigger (150s)", "avoidPlayers")
 createToggle(tabs.Tab1, "Anti Void (Raycast)", "antiVoid")
 
--- Speed Slider (Mobile Supported)
+-- Speed Slider (Limit 300 & Mobile Support)
 local sCont = Instance.new("Frame", tabs.Tab1); sCont.Size = UDim2.new(0.95, 0, 0, 60); sCont.BackgroundTransparency = 1
 local sLab = Instance.new("TextLabel", sCont); sLab.Size = UDim2.new(1, 0, 0, 20); sLab.Text = "Tween Speed: 150"; sLab.TextColor3 = Color3.new(0.8,0.8,1); sLab.BackgroundTransparency = 1; sLab.Font = Enum.Font.GothamMedium
 local track = Instance.new("Frame", sCont); track.Size = UDim2.new(1, -20, 0, 8); track.Position = UDim2.new(0, 10, 0, 35); track.BackgroundColor3 = Color3.fromRGB(40,40,60); Instance.new("UICorner", track)
@@ -122,7 +123,7 @@ knob.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Mou
 UserInputService.InputChanged:Connect(function(i) if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then updateSlider(i) end end)
 UserInputService.InputEnded:Connect(function() drag = false end)
 
--- ================= TAB 2: BOSS & MISC (ตามรูปเป๊ะๆ) =================
+-- ================= TAB 2: BOSS & MISC (ตามรูปภาพ) =================
 local bossSec = Instance.new("Frame", tabs.Tab2); bossSec.Size = UDim2.new(0.95, 0, 0, 130); bossSec.BackgroundColor3 = Color3.fromRGB(22, 18, 35); Instance.new("UICorner", bossSec)
 local bIcon = Instance.new("ImageLabel", bossSec); bIcon.Size = UDim2.new(0, 25, 0, 25); bIcon.Position = UDim2.new(0, 12, 0, 12); bIcon.Image = "rbxassetid://6031215981"; bIcon.BackgroundTransparency = 1
 local bTitle = Instance.new("TextLabel", bossSec); bTitle.Size = UDim2.new(0, 100, 0, 25); bTitle.Position = UDim2.new(0, 45, 0, 12); bTitle.Text = "Auto Boss"; bTitle.TextColor3 = Color3.new(1,1,1); bTitle.Font = Enum.Font.GothamBold; bTitle.BackgroundTransparency = 1; bTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -137,14 +138,13 @@ tBg.MouseButton1Click:Connect(function()
     bDesc.Text = "Boss: "..(settings.autoBoss and "On" or "Off").."\nAuto responds to boss skill checks\nFires attack within 0.15s of each QTE"
 end)
 
--- Misc Buttons
 local function createMiscBtn(n, callback)
     local b = Instance.new("TextButton", tabs.Tab2); b.Size = UDim2.new(0.95, 0, 0, 40); b.BackgroundColor3 = Color3.fromRGB(35, 30, 55); b.Text = n; b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold; Instance.new("UICorner", b)
     b.MouseButton1Click:Connect(callback)
     return b
 end
 
-local fBtn = createMiscBtn("Fast Mode: OFF (Save Battery)", function()
+createMiscBtn("Fast Mode (Toggle Save Battery)", function()
     settings.fastMode = not settings.fastMode
     RunService:Set3dRenderingEnabled(not settings.fastMode)
 end)
@@ -154,7 +154,7 @@ createMiscBtn("Server Hop (Find New Room)", function()
     for _, v in pairs(s.data) do if v.playing < v.maxPlayers and v.id ~= game.JobId then TeleportService:TeleportToPlaceInstance(game.PlaceId, v.id, player) break end end
 end)
 
--- ================= CORE LOGIC (Targeting Fix) =================
+-- ================= CORE LOGIC =================
 local function isFloor(pos)
     if not settings.antiVoid then return true end
     local r = Ray.new(pos + Vector3.new(0, 10, 0), Vector3.new(0, -100, 0))
