@@ -30,7 +30,7 @@ local function getGrowth(plr)
     return 0
 end
 
--- [[ FAST MODE LOGIC ]]
+-- [[ FAST MODE ]]
 local function runFastMode()
     for _, v in pairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") or v:IsA("MeshPart") then
@@ -48,19 +48,25 @@ local function getDangerPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
     local myGrowth = getGrowth(player)
+    
+    local nearest = nil
+    local minDist = avoidDistance + 30 -- ระยะตรวจจับที่กว้างขึ้นเพื่อการหลบที่ทันท่วงที
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= player and p.Character then
             local tHrp = getHRP(p.Character)
             if tHrp then
-                local dist = (hrp.Position - tHrp.Position).Magnitude
-                if dist < avoidDistance and getGrowth(p) > myGrowth then return tHrp end
+                local d = (hrp.Position - tHrp.Position).Magnitude
+                if d < minDist and getGrowth(p) > myGrowth then
+                    minDist = d
+                    nearest = tHrp
+                end
             end
         end
     end
-    return nil
+    return nearest
 end
 
--- [[ MOVEMENT SYSTEM ]]
+-- [[ MOVEMENT SYSTEM (ANTI-VOID + PRECISION) ]]
 local moverConn
 local function stopMover() if moverConn then moverConn:Disconnect() moverConn = nil end end
 
@@ -69,15 +75,22 @@ local function startMovementLoop()
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
         if not hrp or not running then return end
-        if hrp.Position.Y < SAFE_Y then hrp.CFrame = CFrame.new(hrp.Position.X, 50, hrp.Position.Z) end
+        
+        -- [[ ANTI-VOID ]]
+        if hrp.Position.Y < SAFE_Y then
+            hrp.CFrame = CFrame.new(hrp.Position.X, 50, hrp.Position.Z)
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        end
 
         local danger = getDangerPlayer()
         if danger then
-            -- หนีออกจากผู้เล่น (Away)
+            -- ระบบหนี (Priority สูงสุด)
             local dir = (hrp.Position - danger.Position).Unit
-            hrp.CFrame = CFrame.new(hrp.Position + (dir * (avoidSpeed * dt)))
+            -- ความเร็วหนีจะแปรผันตามความเร็วฟาร์มเพื่อให้หนีทันเสมอ
+            local speedToUse = math.max(avoidSpeed, farmSpeed + 20)
+            hrp.CFrame = CFrame.new(hrp.Position + (dir * (speedToUse * dt)))
         else
-            -- เดินไปหาอาหาร (Toward)
+            -- ระบบฟาร์ม
             local foodPos, dist = nil, math.huge
             for _, f in CollectionService:GetTagged("Food") do
                 if f and f.Parent then
@@ -86,25 +99,30 @@ local function startMovementLoop()
                     if d < dist then dist = d foodPos = p end
                 end
             end
-            if foodPos and (foodPos - hrp.Position).Magnitude > 3 then
-                hrp.CFrame = CFrame.new(hrp.Position + ((foodPos - hrp.Position).Unit * (farmSpeed * dt)))
+            
+            if foodPos then
+                local diff = foodPos - hrp.Position
+                local currentDist = diff.Magnitude
+                if currentDist > 0.1 then
+                    -- Precision: ไม่เดินเลยเป้าหมาย
+                    local step = math.min(farmSpeed * dt, currentDist)
+                    hrp.CFrame = CFrame.new(hrp.Position + (diff.Unit * step))
+                end
             end
         end
     end)
 end
 
--- [[ GUI SETUP ]]
+-- [[ GUI LAYERS ]]
 local whiteGui = Instance.new("ScreenGui", player.PlayerGui)
-whiteGui.Name = "Dino_WhiteLayer"
-whiteGui.DisplayOrder = 1
 whiteGui.IgnoreGuiInset = true
+whiteGui.DisplayOrder = 1
 
 local mainGui = Instance.new("ScreenGui", player.PlayerGui)
-mainGui.Name = "Dino_MenuLayer"
 mainGui.DisplayOrder = 99
 mainGui.ResetOnSpawn = false
 
--- PANEL (HORIZONTAL)
+-- PANEL
 local panel = Instance.new("Frame", mainGui)
 panel.Size = UDim2.new(0, 460, 0, 260)
 panel.Position = UDim2.new(0.5, -230, 0.5, -130)
@@ -115,7 +133,7 @@ Instance.new("UICorner", panel)
 
 local title = Instance.new("TextLabel", panel)
 title.Size = UDim2.new(1, 0, 0, 35)
-title.Text = "🦖 BE-DINO-FARM-NT V2 (MOBILE)"
+title.Text = "🦖 BE-DINO-FARM-NT FINAL 1000%"
 title.TextColor3 = Color3.fromRGB(0, 255, 150)
 title.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
 title.Font = Enum.Font.GothamBold
@@ -181,14 +199,14 @@ createBtn("WHITE SCREEN: OFF", 235, 150, 205, Color3.fromRGB(50, 50, 80), functi
         whiteLabel.TextColor3 = Color3.new(0, 0, 0)
         whiteLabel.Font = Enum.Font.GothamBold
         whiteLabel.TextSize = 25
-        whiteLabel.Text = "🦖 FARMING...\nFarm Spd: " .. farmSpeed .. " | Avoid Spd: " .. avoidSpeed
+        whiteLabel.Text = "🦖 FARMING...\nFarm Spd: "..farmSpeed.." | Avoid Spd: "..avoidSpeed
     else
         if whiteGui:FindFirstChild("Overlay") then whiteGui.Overlay:Destroy() end
         whiteLabel = nil
     end
 end)
 
--- SLIDER CREATOR (MOBILE SUPPORT)
+-- SLIDER (MOBILE FRIENDLY)
 local function makeSlider(y, max, default, name, callback)
     local label = Instance.new("TextLabel", panel)
     label.Size = UDim2.new(0, 420, 0, 20)
@@ -224,7 +242,7 @@ local function makeSlider(y, max, default, name, callback)
         label.Text = name .. ": " .. val
         callback(val)
         if whiteLabel then
-            whiteLabel.Text = "🦖 FARMING...\nFarm Spd: " .. farmSpeed .. " | Avoid Spd: " .. avoidSpeed
+            whiteLabel.Text = "🦖 FARMING...\nFarm Spd: "..farmSpeed.." | Avoid Spd: "..avoidSpeed
         end
     end
 
@@ -257,5 +275,3 @@ task.spawn(function()
         VirtualUser:ClickButton2(Vector2.new())
     end
 end)
-
-print("🦖 Be-Dino-Farm-NT V2 (Mobile) Loaded!")
