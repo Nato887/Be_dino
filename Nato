@@ -1,148 +1,153 @@
 local player = game:GetService("Players").LocalPlayer
 local runService = game:GetService("RunService")
 local players = game:GetService("Players")
+local userInputService = game:GetService("UserInputService")
+local vim = game:GetService("VirtualInputManager") -- ใช้ช่วยคลิกกินอัตโนมัติ
 
 -- ================= SETTINGS =================
 local settings = {
     AutoFeed = false,
     AvoidPlayers = false,
     EatSmaller = false,
-    AntiVoid = true
+    AntiVoid = true,
+    MenuKey = Enum.KeyCode.RightControl -- ปุ่มเปิด/ปิดเมนู
 }
 
--- ================= GUI DESIGN (Glad Hub Style) =================
+-- ================= GUI DESIGN (Nato Hub) =================
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "GladHub_Integrated"
+gui.Name = "NatoHub_Final"
 gui.ResetOnSpawn = false
 
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 450, 0, 320)
 main.Position = UDim2.new(0.5, -225, 0.5, -160)
-main.BackgroundColor3 = Color3.fromRGB(15, 12, 28) -- สีมืดโทนม่วง
+main.BackgroundColor3 = Color3.fromRGB(15, 12, 25) -- สีมืดโทน Nato Hub
 main.BorderSizePixel = 0
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
 
 -- Header Title
 local title = Instance.new("TextLabel", main)
-title.Size = UDim2.new(1, -20, 0, 40)
+title.Size = UDim2.new(1, -20, 0, 45)
 title.Position = UDim2.new(0, 15, 0, 0)
-title.Text = "Glad Hub | Be Dino v2.3"
-title.TextColor3 = Color3.new(1, 1, 1)
+title.Text = "Nato Hub | Be Dino v2.3" 
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Font = Enum.Font.SourceSansBold
-title.TextSize = 18
+title.TextSize = 20
 title.BackgroundTransparency = 1
 
--- ฟังก์ชันสร้างปุ่มพร้อมคำอธิบาย (ตามที่คุณถาม)
+-- ระบบเปิด/ปิดเมนูด้วยปุ่ม Keybind
+userInputService.InputBegan:Connect(function(input, gp)
+    if not gp and input.KeyCode == settings.MenuKey then
+        main.Visible = not main.Visible
+    end
+end)
+
+-- ฟังก์ชันสร้างปุ่มเมนู (มีชื่อหลัก และคำอธิบายตัวเล็กด้านล่าง)
 local function createToggle(name, subText, prop, pos)
     local btn = Instance.new("TextButton", main)
-    btn.Size = UDim2.new(0, 300, 0, 50)
-    btn.Position = UDim2.new(0, 135, 0, pos)
-    btn.BackgroundColor3 = Color3.fromRGB(30, 25, 50)
+    btn.Size = UDim2.new(0, 320, 0, 55)
+    btn.Position = UDim2.new(0.5, -160, 0, pos)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 25, 55)
     btn.Text = "" 
     btn.AutoButtonColor = false
     Instance.new("UICorner", btn)
 
-    -- ชื่อเมนูหลัก
     local mainLabel = Instance.new("TextLabel", btn)
     mainLabel.Size = UDim2.new(1, -60, 0, 25)
-    mainLabel.Position = UDim2.new(0, 12, 0, 5)
+    mainLabel.Position = UDim2.new(0, 12, 0, 8)
     mainLabel.Text = name
     mainLabel.TextColor3 = Color3.new(1, 1, 1)
     mainLabel.Font = Enum.Font.SourceSansBold
-    mainLabel.TextSize = 15
+    mainLabel.TextSize = 16
     mainLabel.BackgroundTransparency = 1
     mainLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-    -- คำอธิบายตัวเล็กด้านล่าง (ที่คุณถามถึง)
     local descLabel = Instance.new("TextLabel", btn)
     descLabel.Size = UDim2.new(1, -60, 0, 20)
-    descLabel.Position = UDim2.new(0, 12, 0, 25)
+    descLabel.Position = UDim2.new(0, 12, 0, 28)
     descLabel.Text = subText
-    descLabel.TextColor3 = Color3.fromRGB(130, 130, 150)
+    descLabel.TextColor3 = Color3.fromRGB(150, 150, 170)
     descLabel.Font = Enum.Font.SourceSans
-    descLabel.TextSize = 12
+    descLabel.TextSize = 13
     descLabel.BackgroundTransparency = 1
     descLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-    -- สวิตซ์เปิด-ปิด (Indicator)
     local status = Instance.new("Frame", btn)
-    status.Size = UDim2.new(0, 35, 0, 18)
-    status.Position = UDim2.new(1, -45, 0.5, -9)
-    status.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(15, 15, 15)
+    status.Size = UDim2.new(0, 40, 0, 20)
+    status.Position = UDim2.new(1, -55, 0.5, -10)
+    status.BackgroundColor3 = settings[prop] and Color3.fromRGB(140, 50, 255) or Color3.fromRGB(10, 10, 10)
     Instance.new("UICorner", status).CornerRadius = UDim.new(1, 0)
 
     btn.MouseButton1Click:Connect(function()
         settings[prop] = not settings[prop]
-        status.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(15, 15, 15)
+        status.BackgroundColor3 = settings[prop] and Color3.fromRGB(140, 50, 255) or Color3.fromRGB(10, 10, 10)
     end)
 end
 
--- สร้างรายการเมนู (เลียนแบบในรูป)
-createToggle("Auto Feed", "Priority: Eggs > Players > Meats", "AutoFeed", 50)
-createToggle("Avoid Players", "Avoid players with distance: 134", "AvoidPlayers", 110)
-createToggle("Eat Smaller Players", "Hunt players with Growth > 5000 when safe", "EatSmaller", 170)
-createToggle("Anti Void", "Prevent you from falling into the void", "AntiVoid", 230)
+-- สร้างรายการเมนู (เลียนแบบตามรูปภาพ)
+createToggle("Auto Feed", "Priority: Eggs > Players > Meats", "AutoFeed", 55)
+createToggle("Avoid Players", "Avoid players with distance: 134", "AvoidPlayers", 120)
+createToggle("Eat Smaller Players", "Hunt players with Growth > 5000", "EatSmaller", 185)
+createToggle("Anti Void", "Prevent you from falling into the void", "AntiVoid", 250)
 
 -- ================= LOGIC SYSTEM =================
 
-runService.RenderStepped:Connect(function()
+runService.Heartbeat:Connect(function()
     local char = player.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    -- 1. Anti Void (ถ้าตกแมพให้วาร์ปขึ้นมา)
-    if settings.AntiVoid and root.Position.Y < -50 then
-        root.CFrame = root.CFrame + Vector3.new(0, 200, 0)
-        root.AssemblyLinearVelocity = Vector3.new(0,0,0)
+    -- 1. Anti Void
+    if settings.AntiVoid and root.Position.Y < -40 then
+        root.CFrame = root.CFrame * CFrame.new(0, 100, 0)
+        root.Velocity = Vector3.new(0,0,0)
     end
 
-    -- 2. Avoid Players (หนีตัวใหญ่)
+    -- 2. Avoid Players (วาร์ปหนีตัวที่ใหญ่กว่า)
     if settings.AvoidPlayers then
         for _, p in ipairs(players:GetPlayers()) do
             if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                 local eRoot = p.Character.HumanoidRootPart
-                -- เงื่อนไข: ถ้ามันตัวใหญ่กว่าเรา และอยู่ใกล้เกิน 134 studs
-                if eRoot.Size.Magnitude > root.Size.Magnitude and (root.Position - eRoot.Position).Magnitude < 134 then
-                    local escapeDir = (root.Position - eRoot.Position).Unit
-                    root.CFrame = root.CFrame + escapeDir * 15 -- วาร์ปหนี
+                if eRoot.Size.Magnitude > root.Size.Magnitude and (root.Position - eRoot.Position).Magnitude < 100 then
+                    root.CFrame = root.CFrame * CFrame.new(0, 0, 10) -- ถอยหลังหนี
                     return
                 end
             end
         end
     end
 
-    -- 3. Auto Farm & Hunt
+    -- 3. Auto Farm & Eat
     if settings.AutoFeed then
         local target = nil
         
-        -- ตรวจหา Player ตัวเล็ก (เงื่อนไข Growth > 5000)
+        -- ล่าคนตัวเล็กก่อน
         if settings.EatSmaller then
             for _, p in ipairs(players:GetPlayers()) do
                 if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                     local pRoot = p.Character.HumanoidRootPart
-                    -- สมมติว่าค่า Growth ในเกมนี้วัดจาก Size.Magnitude นะครับ
-                    if pRoot.Size.Magnitude < root.Size.Magnitude and pRoot.Size.Magnitude > 10 then 
-                        target = pRoot
-                        break
+                    if pRoot.Size.Magnitude < root.Size.Magnitude then
+                        target = pRoot; break
                     end
                 end
             end
         end
 
-        -- ถ้าไม่มีคนให้ล่า ให้ไปหาเนื้อ (Meat) หรือไข่ (Egg)
+        -- ถ้าไม่มีคนให้หาไข่หรือเนื้อในแมพ
         if not target then
             for _, v in ipairs(workspace:GetDescendants()) do
                 if v:IsA("BasePart") and (v.Name:lower():find("meat") or v.Name:lower():find("egg")) then
-                    target = v
-                    break
+                    target = v; break
                 end
             end
         end
 
-        -- วาร์ปไปกิน
+        -- วาร์ปไปหาและกดคลิกกิน
         if target then
-            root.CFrame = target.CFrame + Vector3.new(0, 2, 0)
+            root.CFrame = target.CFrame * CFrame.new(0, 2, 0)
+            vim:SendMouseButtonEvent(0, 0, 0, true, game, 1) -- คลิกซ้าย (กิน)
+            task.wait(0.1)
+            vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
         end
     end
 end)
