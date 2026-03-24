@@ -15,6 +15,7 @@ local avoidSpeed = 150
 local avoidDistance = 150
 local whiteScreenOn = false
 local avoidPlayerEnabled = false
+local fastMode = false
 
 -- [[ UTILS ]]
 local function getHRP(target)
@@ -29,21 +30,30 @@ local function getGrowth(plr)
     return 0
 end
 
+-- [[ FAST MODE LOGIC ]]
+local function runFastMode()
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") then
+            local n = v.Name:lower()
+            if n:find("tree") or n:find("rock") or n:find("mountain") or n:find("bush") then
+                v:Destroy()
+            end
+        end
+    end
+end
+
 -- [[ AVOID PLAYER LOGIC ]]
 local function getDangerPlayer()
     if not avoidPlayerEnabled then return nil end
     local hrp = getHRP()
     if not hrp then return nil end
-    
     local myGrowth = getGrowth(player)
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= player and p.Character then
-            local targetHrp = getHRP(p.Character)
-            if targetHrp then
-                local dist = (hrp.Position - targetHrp.Position).Magnitude
-                if dist < avoidDistance and getGrowth(p) > myGrowth then
-                    return targetHrp
-                end
+            local tHrp = getHRP(p.Character)
+            if tHrp then
+                local dist = (hrp.Position - tHrp.Position).Magnitude
+                if dist < avoidDistance and getGrowth(p) > myGrowth then return tHrp end
             end
         end
     end
@@ -59,17 +69,15 @@ local function startMovementLoop()
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
         if not hrp or not running then return end
-        
-        -- Anti-Void
         if hrp.Position.Y < SAFE_Y then hrp.CFrame = CFrame.new(hrp.Position.X, 50, hrp.Position.Z) end
 
         local danger = getDangerPlayer()
         if danger then
-            -- Logic: วิ่งหนี (Away from player)
-            local direction = (hrp.Position - danger.Position).Unit
-            hrp.CFrame = CFrame.new(hrp.Position + (direction * (avoidSpeed * dt)))
+            -- หนีออกจากผู้เล่น (Away)
+            local dir = (hrp.Position - danger.Position).Unit
+            hrp.CFrame = CFrame.new(hrp.Position + (dir * (avoidSpeed * dt)))
         else
-            -- Logic: ฟาร์มปกติ
+            -- เดินไปหาอาหาร (Toward)
             local foodPos, dist = nil, math.huge
             for _, f in CollectionService:GetTagged("Food") do
                 if f and f.Parent then
@@ -78,93 +86,61 @@ local function startMovementLoop()
                     if d < dist then dist = d foodPos = p end
                 end
             end
-            
             if foodPos and (foodPos - hrp.Position).Magnitude > 3 then
-                local dir = (foodPos - hrp.Position).Unit
-                hrp.CFrame = CFrame.new(hrp.Position + (dir * (farmSpeed * dt)))
+                hrp.CFrame = CFrame.new(hrp.Position + ((foodPos - hrp.Position).Unit * (farmSpeed * dt)))
             end
         end
     end)
 end
 
--- [[ GUI LAYERS ]]
+-- [[ GUI SETUP ]]
 local whiteGui = Instance.new("ScreenGui", player.PlayerGui)
-whiteGui.Name = "DinoFarm_WhiteLayer"
+whiteGui.Name = "Dino_WhiteLayer"
 whiteGui.DisplayOrder = 1
-whiteGui.IgnoreGuiInset = true -- ทำให้เต็มจอ 100%
+whiteGui.IgnoreGuiInset = true
 
 local mainGui = Instance.new("ScreenGui", player.PlayerGui)
-mainGui.Name = "DinoFarm_MenuLayer"
-mainGui.DisplayOrder = 99 -- อยู่บนสุดเสมอ
+mainGui.Name = "Dino_MenuLayer"
+mainGui.DisplayOrder = 99
 mainGui.ResetOnSpawn = false
 
--- [[ WHITE SCREEN OVERLAY ]]
-local whiteLabel
-local function updateWhiteScreenInfo()
-    if whiteLabel then
-        whiteLabel.Text = "🦖 BE-DINO FARMING...\nFarm Speed: " .. farmSpeed .. "\nAvoid Speed: " .. avoidSpeed
-    end
-end
-
-local function toggleWhiteScreen(state)
-    if state then
-        local frame = Instance.new("Frame", whiteGui)
-        frame.Name = "Overlay"
-        frame.Size = UDim2.new(1, 0, 1, 0)
-        frame.BackgroundColor3 = Color3.new(1, 1, 1)
-        frame.BorderSizePixel = 0
-        
-        whiteLabel = Instance.new("TextLabel", frame)
-        whiteLabel.Size = UDim2.new(1, 0, 1, 0)
-        whiteLabel.BackgroundTransparency = 1
-        whiteLabel.TextColor3 = Color3.new(0, 0, 0)
-        whiteLabel.Font = Enum.Font.GothamBold
-        whiteLabel.TextSize = 30
-        updateWhiteScreenInfo()
-    else
-        if whiteGui:FindFirstChild("Overlay") then whiteGui.Overlay:Destroy() end
-        whiteLabel = nil
-    end
-end
-
--- [[ MAIN PANEL ]]
+-- PANEL (HORIZONTAL)
 local panel = Instance.new("Frame", mainGui)
-panel.Size = UDim2.new(0, 300, 0, 420)
-panel.Position = UDim2.new(0.5, -150, 0.5, -210)
-panel.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+panel.Size = UDim2.new(0, 460, 0, 260)
+panel.Position = UDim2.new(0.5, -230, 0.5, -130)
+panel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 panel.Active = true
 panel.Draggable = true
 Instance.new("UICorner", panel)
 
 local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1, 0, 0, 40)
-title.Text = "🦖 Be-Dino-Farm-NT V2"
-title.TextColor3 = Color3.fromRGB(150, 255, 150)
-title.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+title.Size = UDim2.new(1, 0, 0, 35)
+title.Text = "🦖 BE-DINO-FARM-NT V2 (MOBILE)"
+title.TextColor3 = Color3.fromRGB(0, 255, 150)
+title.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
 title.Font = Enum.Font.GothamBold
 Instance.new("UICorner", title)
 
--- [[ TOGGLE BUTTON (OPEN/CLOSE) ]]
+-- TOGGLE BUTTON
 local toggleBtn = Instance.new("TextButton", mainGui)
-toggleBtn.Size = UDim2.new(0, 110, 0, 35)
+toggleBtn.Size = UDim2.new(0, 100, 0, 32)
 toggleBtn.Position = UDim2.new(0, 10, 0, 10)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(45, 185, 85)
-toggleBtn.Text = "CLOSE MENU"
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+toggleBtn.Text = "HIDE MENU"
 toggleBtn.TextColor3 = Color3.new(1,1,1)
 toggleBtn.Font = Enum.Font.GothamBold
 Instance.new("UICorner", toggleBtn)
 
 toggleBtn.MouseButton1Click:Connect(function()
     panel.Visible = not panel.Visible
-    toggleBtn.Text = panel.Visible and "CLOSE MENU" or "OPEN MENU"
-    toggleBtn.BackgroundColor3 = panel.Visible and Color3.fromRGB(45, 185, 85) or Color3.fromRGB(205, 55, 55)
+    toggleBtn.Text = panel.Visible and "HIDE MENU" or "SHOW MENU"
 end)
 
--- [[ BUTTON CREATOR ]]
-local function createBtn(name, y, color, callback)
+-- BUTTON CREATOR
+local function createBtn(name, x, y, sizeX, color, callback)
     local btn = Instance.new("TextButton", panel)
-    btn.Size = UDim2.new(0, 260, 0, 35)
-    btn.Position = UDim2.new(0.5, -130, 0, y)
+    btn.Size = UDim2.new(0, sizeX, 0, 38)
+    btn.Position = UDim2.new(0, x, 0, y)
     btn.Text = name
     btn.BackgroundColor3 = color
     btn.TextColor3 = Color3.new(1,1,1)
@@ -174,64 +150,106 @@ local function createBtn(name, y, color, callback)
     return btn
 end
 
-createBtn("START", 320, Color3.fromRGB(45, 205, 85), function() running = true startMovementLoop() end)
-createBtn("STOP", 365, Color3.fromRGB(205, 55, 55), function() running = false stopMover() end)
+createBtn("START", 20, 200, 130, Color3.fromRGB(45, 190, 85), function() running = true startMovementLoop() end)
+createBtn("STOP", 165, 200, 130, Color3.fromRGB(210, 50, 50), function() running = false stopMover() end)
 
-local avoidBtn = createBtn("AVOID PLAYER: OFF", 270, Color3.fromRGB(85, 85, 85), function(b)
-    avoidPlayerEnabled = not avoidPlayerEnabled
-    b.Text = avoidPlayerEnabled and "AVOID PLAYER: ON" or "AVOID PLAYER: OFF"
-    b.BackgroundColor3 = avoidPlayerEnabled and Color3.fromRGB(255, 125, 0) or Color3.fromRGB(85, 85, 85)
+createBtn("FAST MODE", 310, 200, 130, Color3.fromRGB(80, 80, 110), function(b)
+    fastMode = not fastMode
+    if fastMode then runFastMode() end
+    b.Text = fastMode and "FAST: ON" or "FAST MODE"
+    b.BackgroundColor3 = fastMode and Color3.fromRGB(0, 160, 255) or Color3.fromRGB(80, 80, 110)
 end)
 
-createBtn("WHITE SCREEN: OFF", 225, Color3.fromRGB(55, 55, 75), function(b)
+local avoidBtn = createBtn("AVOID: OFF", 20, 150, 205, Color3.fromRGB(70, 70, 70), function(b)
+    avoidPlayerEnabled = not avoidPlayerEnabled
+    b.Text = avoidPlayerEnabled and "AVOID: ON" or "AVOID: OFF"
+    b.BackgroundColor3 = avoidPlayerEnabled and Color3.fromRGB(255, 130, 0) or Color3.fromRGB(70, 70, 70)
+end)
+
+local whiteLabel
+createBtn("WHITE SCREEN: OFF", 235, 150, 205, Color3.fromRGB(50, 50, 80), function(b)
     whiteScreenOn = not whiteScreenOn
     b.Text = whiteScreenOn and "WHITE SCREEN: ON" or "WHITE SCREEN: OFF"
-    toggleWhiteScreen(whiteScreenOn)
+    if whiteScreenOn then
+        local f = Instance.new("Frame", whiteGui)
+        f.Name = "Overlay"
+        f.Size = UDim2.new(1, 0, 1, 0)
+        f.BackgroundColor3 = Color3.new(1, 1, 1)
+        whiteLabel = Instance.new("TextLabel", f)
+        whiteLabel.Size = UDim2.new(1, 0, 1, 0)
+        whiteLabel.BackgroundTransparency = 1
+        whiteLabel.TextColor3 = Color3.new(0, 0, 0)
+        whiteLabel.Font = Enum.Font.GothamBold
+        whiteLabel.TextSize = 25
+        whiteLabel.Text = "🦖 FARMING...\nFarm Spd: " .. farmSpeed .. " | Avoid Spd: " .. avoidSpeed
+    else
+        if whiteGui:FindFirstChild("Overlay") then whiteGui.Overlay:Destroy() end
+        whiteLabel = nil
+    end
 end)
 
--- [[ SLIDER CREATOR ]]
+-- SLIDER CREATOR (MOBILE SUPPORT)
 local function makeSlider(y, max, default, name, callback)
     local label = Instance.new("TextLabel", panel)
-    label.Size = UDim2.new(0, 280, 0, 20)
-    label.Position = UDim2.new(0, 15, 0, y)
+    label.Size = UDim2.new(0, 420, 0, 20)
+    label.Position = UDim2.new(0, 20, 0, y)
     label.Text = name .. ": " .. default
     label.TextColor3 = Color3.new(1,1,1)
     label.BackgroundTransparency = 1
     label.TextXAlignment = Enum.TextXAlignment.Left
 
     local track = Instance.new("Frame", panel)
-    track.Size = UDim2.new(0, 260, 0, 6)
+    track.Size = UDim2.new(0, 420, 0, 8)
     track.Position = UDim2.new(0, 20, 0, y + 25)
-    track.BackgroundColor3 = Color3.new(0.2, 0.2, 0.3)
+    track.BackgroundColor3 = Color3.new(0.15, 0.15, 0.25)
+    Instance.new("UICorner", track)
+
     local fill = Instance.new("Frame", track)
     fill.Size = UDim2.new(default/max, 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(0, 255, 155)
+    fill.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+    Instance.new("UICorner", fill)
+
     local knob = Instance.new("TextButton", track)
-    knob.Size = UDim2.new(0, 16, 0, 16)
-    knob.Position = UDim2.new(default/max, -8, 0.5, -8)
+    knob.Size = UDim2.new(0, 26, 0, 26)
+    knob.Position = UDim2.new(default/max, -13, 0.5, -13)
     knob.Text = ""
+    knob.BackgroundColor3 = Color3.new(1, 1, 1)
     Instance.new("UICorner", knob)
 
+    local function updateSlider(input)
+        local delta = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local val = math.floor(delta * max)
+        fill.Size = UDim2.new(delta, 0, 1, 0)
+        knob.Position = UDim2.new(delta, -13, 0.5, -13)
+        label.Text = name .. ": " .. val
+        callback(val)
+        if whiteLabel then
+            whiteLabel.Text = "🦖 FARMING...\nFarm Spd: " .. farmSpeed .. " | Avoid Spd: " .. avoidSpeed
+        end
+    end
+
     local dragging = false
-    knob.MouseButton1Down:Connect(function() dragging = true end)
-    UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
-    UserInputService.InputChanged:Connect(function(i)
-        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-            local r = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-            local val = math.floor(r * max)
-            fill.Size = UDim2.new(r, 0, 1, 0)
-            knob.Position = UDim2.new(r, -8, 0.5, -8)
-            label.Text = name .. ": " .. val
-            callback(val)
-            updateWhiteScreenInfo()
+    knob.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            updateSlider(input)
         end
     end)
 end
 
-makeSlider(55, 1000, farmSpeed, "Speed Farm", function(v) farmSpeed = v end)
-makeSlider(125, 1000, avoidSpeed, "Speed Avoid Player", function(v) avoidSpeed = v end)
+makeSlider(45, 1000, farmSpeed, "Speed Farm", function(v) farmSpeed = v end)
+makeSlider(95, 1000, avoidSpeed, "Speed Avoid Player", function(v) avoidSpeed = v end)
 
--- [[ ANTI AFK ]]
+-- ANTI AFK
 task.spawn(function()
     while true do
         task.wait(30)
@@ -240,4 +258,4 @@ task.spawn(function()
     end
 end)
 
-print("Be-Dino-Farm-NT V2 loaded successfully!")
+print("🦖 Be-Dino-Farm-NT V2 (Mobile) Loaded!")
