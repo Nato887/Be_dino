@@ -4,7 +4,7 @@ local enabled = false
 local player = game:GetService("Players").LocalPlayer
 local tweenService = game:GetService("TweenService")
 
--- ================= GUI =================
+-- GUI
 local gui = Instance.new("ScreenGui")
 gui.Parent = player:WaitForChild("PlayerGui")
 gui.Name = "MeatFarmGUI"
@@ -13,76 +13,53 @@ gui.ResetOnSpawn = false
 local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.new(0, 200, 0, 120)
 frame.Position = UDim2.new(0, 20, 0, 200)
-frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-frame.BorderSizePixel = 0
+frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
 Instance.new("UICorner", frame)
 
-local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1, 0, 0, 30)
-title.Text = "MEAT FARM 🦖"
-title.BackgroundTransparency = 1
-title.TextColor3 = Color3.fromRGB(0, 255, 0)
-title.Font = Enum.Font.SourceSansBold
-title.TextSize = 18
-
 local startBtn = Instance.new("TextButton", frame)
-startBtn.Size = UDim2.new(0.8, 0, 0, 30)
-startBtn.Position = UDim2.new(0.1, 0, 0.4, 0)
+startBtn.Size = UDim2.new(0.8,0,0,30)
+startBtn.Position = UDim2.new(0.1,0,0.4,0)
 startBtn.Text = "START"
-startBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+startBtn.BackgroundColor3 = Color3.fromRGB(0,200,0)
 
 local stopBtn = Instance.new("TextButton", frame)
-stopBtn.Size = UDim2.new(0.8, 0, 0, 30)
-stopBtn.Position = UDim2.new(0.1, 0, 0.7, 0)
+stopBtn.Size = UDim2.new(0.8,0,0,30)
+stopBtn.Position = UDim2.new(0.1,0,0.7,0)
 stopBtn.Text = "STOP"
-stopBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-
-local image = Instance.new("ImageLabel", frame)
-image.Size = UDim2.new(0, 40, 0, 40)
-image.Position = UDim2.new(1, -45, 0, -5)
-image.BackgroundTransparency = 1
-image.Image = "rbxassetid://12522030"
+stopBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
 
 startBtn.MouseButton1Click:Connect(function()
 	enabled = true
+	print("START แล้ว") -- debug
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
 	enabled = false
 end)
 
--- ================= ฟังก์ชัน =================
-
+-- Tween
 local function tweenTo(root, cf)
 	local tween = tweenService:Create(
 		root,
-		TweenInfo.new(0.015, Enum.EasingStyle.Linear), -- 🔥 ลื่นกว่า 0.01
+		TweenInfo.new(0.015, Enum.EasingStyle.Linear),
 		{CFrame = cf}
 	)
 	tween:Play()
 	tween.Completed:Wait()
 end
 
+-- หา meat แบบชัวร์
 local function getMeats()
 	local meats = {}
-	for _, v in ipairs(workspace:GetChildren()) do
-		if v.Name:lower():find("meat") then
-			local target = v:FindFirstChild(v.Name:lower():gsub("_", ""))
-			if target then
-				table.insert(meats, target)
-			end
+	for _, v in ipairs(workspace:GetDescendants()) do -- 🔥 ดีกว่า GetChildren
+		if v:IsA("BasePart") and v.Name:lower():find("meat") then
+			table.insert(meats, v)
 		end
 	end
 	return meats
 end
 
-local function sortByDistance(root, list)
-	table.sort(list, function(a, b)
-		return (root.Position - a.Position).Magnitude < (root.Position - b.Position).Magnitude
-	end)
-end
-
--- ================= MAIN LOOP =================
+-- loop หลัก
 task.spawn(function()
 	while true do
 		if enabled and not running then
@@ -92,8 +69,8 @@ task.spawn(function()
 			local root = char:WaitForChild("HumanoidRootPart")
 
 			local meats = getMeats()
-			sortByDistance(root, meats)
-
+			print("เจอ meat:", #meats) -- debug
+			
 			for _, target in ipairs(meats) do
 				if not enabled then break end
 				tweenTo(root, target.CFrame)
@@ -102,6 +79,6 @@ task.spawn(function()
 			running = false
 		end
 		
-		task.wait(0.1) -- 🔥 ไม่ยิงถี่เกิน
+		task.wait(0.1)
 	end
 end)
