@@ -10,75 +10,199 @@ if not player.Character then player.CharacterAdded:Wait() end
 -- CONFIG
 local SAFE_Y = -50
 local running = false
-local tweenSpeed = 100
+local farmSpeed = 100
+local avoidSpeed = 150
+local avoidDistance = 150
 local fastMode = false
-local updateRate = 0.05
 local whiteScreenOn = false
+local avoidPlayerEnabled = false
 
 -- ROOT
-local function getHRP()
-    local char = player.Character
+local function getHRP(target)
+    local char = target or player.Character
     if not char then return nil end
     return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
--- FAST MODE LOOP (ลบต้นไม้/ภูเขา)
-local function optimizeMapLoop()
-    while fastMode do
-        for _,v in pairs(workspace:GetDescendants()) do
-            if v:IsA("BasePart") or v:IsA("MeshPart") then
-                local n = v.Name:lower()
-                if not n:find("floor") and not n:find("terrain") then
-                    if n:find("tree") or n:find("rock") or n:find("mountain") or n:find("bush") then
-                        v.LocalTransparencyModifier = 1
-                        v.CanCollide = false
-                    end
+-- FUNCTION: GET GROWTH (สมมติว่าค่าอยู่ใน Leaderstats)
+local function getGrowth(plr)
+    local ls = plr:FindFirstChild("leaderstats")
+    if ls and ls:FindFirstChild("Growth") then
+        return ls.Growth.Value
+    end
+    return 0
+end
+
+-- LOGIC: CHECK DANGER PLAYERS
+local function getDangerPlayer()
+    if not avoidPlayerEnabled then return nil end
+    local hrp = getHRP()
+    if not hrp then return nil end
+    
+    local myGrowth = getGrowth(player)
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            local targetHrp = getHRP(p.Character)
+            if targetHrp then
+                local dist = (hrp.Position - targetHrp.Position).Magnitude
+                if dist < avoidDistance and getGrowth(p) > myGrowth then
+                    return targetHrp
                 end
             end
         end
-        task.wait(0.1)
     end
+    return nil
 end
 
--- FOOD
-local function getClosestFood()
-    local hrp = getHRP()
-    if not hrp then return nil end
-    local best, dist = nil, math.huge
-    for _,f in CollectionService:GetTagged("Food") do
-        if f and f.Parent then
-            local pos = f:IsA("Model") and f:GetPivot().Position or f.Position
-            local d = (hrp.Position - pos).Magnitude
-            if d < dist then
-                dist = d
-                best = pos
-            end
-        end
-    end
-    return best
-end
-
--- MOVE
+-- MOVE LOGIC (TWEEN AWAY / TOWARD)
 local moverConn
 local function stopMover()
     if moverConn then moverConn:Disconnect() moverConn = nil end
 end
 
-local function moveTo(pos)
+local function startMovementLoop()
     stopMover()
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
         if not hrp or not running then return end
-        if hrp.Position.Y < SAFE_Y then hrp.CFrame = CFrame.new(hrp.Position.X,50,hrp.Position.Z) end
-        local diff = pos - hrp.Position
-        local dist = diff.Magnitude
-        if dist < 3 then return end
-        local step = math.min(tweenSpeed * dt, dist)
-        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
+        
+        -- Anti-Void
+        if hrp.Position.Y < SAFE_Y then hrp.CFrame = CFrame.new(hrp.Position.X, 50, hrp.Position.Z) end
+
+        local danger = getDangerPlayer()
+        if danger then
+            -- ระบบหนี (Away from player)
+            local direction = (hrp.Position - danger.Position).Unit
+            local targetPos = hrp.Position + (direction * 10)
+            hrp.CFrame = CFrame.new(hrp.Position + (direction * (avoidSpeed * dt)))
+        else
+            -- ระบบฟาร์มปกติ
+            local foodPos = nil
+            local dist = math.huge
+            for _, f in CollectionService:GetTagged("Food") do
+                if f and f.Parent then
+                    local p = f:IsA("Model") and f:GetPivot().Position or f.Position
+                    local d = (hrp.Position - p).Magnitude
+                    if d < dist then dist = d foodPos = p end
+                end
+            end
+            
+            if foodPos then
+                local diff = foodPos - hrp.Position
+                if diff.Magnitude > 3 then
+                    hrp.CFrame = CFrame.new(hrp.Position + (diff.Unit * (farmSpeed * dt)))
+                end
+            end
+        end
     end)
 end
 
--- ANTI AFK
+-- GUI SETUP
+local gui = Instance.new("ScreenGui", player.PlayerGui)
+gui.Name = "Be-Dino-Farm-V2"
+gui.ResetOnSpawn = false
+
+local panel = Instance.new("Frame", gui)
+panel.Size = UDim2.new(0, 300, 0, 380)
+panel.Position = UDim2.new(0.5, -150, 0.5, -190)
+panel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
+
+local title = Instance.new("TextLabel", panel)
+title.Size = UDim2.new(1, 0, 0, 40)
+title.Text = "🦖 Be-Dino-Farm-NT V2"
+title.TextColor3 = Color3.fromRGB(150, 255, 150)
+title.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+title.Font = Enum.Font.GothamBold
+
+-- BUTTONS
+local function createBtn(name, y, color, callback)
+    local btn = Instance.new("TextButton", panel)
+    btn.Size = UDim2.new(0, 260, 0, 35)
+    btn.Position = UDim2.new(0.5, -130, 0, y)
+    btn.Text = name
+    btn.BackgroundColor3 = color
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", btn)
+    btn.MouseButton1Click:Connect(function() callback(btn) end)
+    return btn
+end
+
+createBtn("START", 280, Color3.fromRGB(40, 200, 80), function() running = true startMovementLoop() end)
+createBtn("STOP", 325, Color3.fromRGB(200, 50, 50), function() running = false stopMover() end)
+
+local avoidBtn = createBtn("AVOID PLAYER: OFF", 235, Color3.fromRGB(100, 100, 100), function(b)
+    avoidPlayerEnabled = not avoidPlayerEnabled
+    b.Text = avoidPlayerEnabled and "AVOID PLAYER: ON" or "AVOID PLAYER: OFF"
+    b.BackgroundColor3 = avoidPlayerEnabled and Color3.fromRGB(255, 150, 0) or Color3.fromRGB(100, 100, 100)
+end)
+
+local whiteBtn = createBtn("WHITE SCREEN: OFF", 190, Color3.fromRGB(60, 60, 80), function(b)
+    whiteScreenOn = not whiteScreenOn
+    b.Text = whiteScreenOn and "WHITE SCREEN: ON" or "WHITE SCREEN: OFF"
+    if whiteScreenOn then
+        local f = Instance.new("Frame", gui)
+        f.Name = "WhiteOverlay"
+        f.Size = UDim2.new(1, 0, 1, 0)
+        f.BackgroundColor3 = Color3.new(1, 1, 1)
+        f.ZIndex = 10 -- ทับทุกอย่าง
+        local t = Instance.new("TextLabel", f)
+        t.Size = UDim2.new(1, 0, 1, 0)
+        t.Text = "🦖 BE-DINO FARMING...\nSpeed: " .. farmSpeed
+        t.TextColor3 = Color3.new(0,0,0)
+        t.Font = Enum.Font.GothamBold
+        t.TextSize = 30
+        t.BackgroundTransparency = 1
+    else
+        if gui:FindFirstChild("WhiteOverlay") then gui.WhiteOverlay:Destroy() end
+    end
+end)
+
+-- SLIDERS
+local function makeSlider(y, max, default, name, callback)
+    local label = Instance.new("TextLabel", panel)
+    label.Size = UDim2.new(0, 280, 0, 20)
+    label.Position = UDim2.new(0, 10, 0, y)
+    label.Text = name .. ": " .. default
+    label.TextColor3 = Color3.new(1,1,1)
+    label.BackgroundTransparency = 1
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local track = Instance.new("Frame", panel)
+    track.Size = UDim2.new(0, 260, 0, 6)
+    track.Position = UDim2.new(0, 20, 0, y + 25)
+    track.BackgroundColor3 = Color3.new(0.2, 0.2, 0.3)
+
+    local fill = Instance.new("Frame", track)
+    fill.Size = UDim2.new(default/max, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+
+    local knob = Instance.new("TextButton", track)
+    knob.Size = UDim2.new(0, 14, 0, 14)
+    knob.Position = UDim2.new(default/max, -7, 0.5, -7)
+    knob.Text = ""
+
+    local dragging = false
+    knob.MouseButton1Down:Connect(function() dragging = true end)
+    UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local r = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+            local val = math.floor(r * max)
+            fill.Size = UDim2.new(r, 0, 1, 0)
+            knob.Position = UDim2.new(r, -7, 0.5, -7)
+            label.Text = name .. ": " .. val
+            callback(val)
+        end
+    end)
+end
+
+makeSlider(50, 500, farmSpeed, "Speed Farm", function(v) farmSpeed = v end)
+makeSlider(110, 500, avoidSpeed, "Speed Avoid Player", function(v) avoidSpeed = v end)
+
+-- ANTI AFK & STATUS
+function setStatus(s) print("Status:", s) end
 task.spawn(function()
     while true do
         task.wait(30)
@@ -87,158 +211,4 @@ task.spawn(function()
     end
 end)
 
--- GUI
-local gui = Instance.new("ScreenGui", player.PlayerGui)
-gui.Name = "Be-Dino-Farm-NT"
-gui.ResetOnSpawn = false
-
-local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,300,0,300)
-panel.Position = UDim2.new(0.5,-150,0.5,-150)
-panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0,10)
-
--- TITLE
-local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1,0,0,30)
-title.Text = "🦖 Be-Dino-Farm-NT"
-title.BackgroundColor3 = Color3.fromRGB(25,25,50)
-title.TextColor3 = Color3.fromRGB(150,255,150)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 15
-
--- OPEN/CLOSE BUTTON
-local toggleBtn = Instance.new("TextButton", gui)
-toggleBtn.Size = UDim2.new(0,120,0,32)
-toggleBtn.Position = UDim2.new(0,10,0,10)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(35,120,40)
-toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
-toggleBtn.Text = "🦖 OPEN"
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextSize = 14
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0,6)
-
-toggleBtn.MouseButton1Click:Connect(function()
-    panel.Visible = not panel.Visible
-end)
-
--- START / STOP
-local start = Instance.new("TextButton", panel)
-start.Size = UDim2.new(0,120,0,35)
-start.Position = UDim2.new(0,10,1,-55)
-start.Text = "START"
-start.BackgroundColor3 = Color3.fromRGB(40,200,80)
-
-local stop = Instance.new("TextButton", panel)
-stop.Size = UDim2.new(0,120,0,35)
-stop.Position = UDim2.new(1,-130,1,-55)
-stop.Text = "STOP"
-stop.BackgroundColor3 = Color3.fromRGB(200,50,50)
-
--- FAST BUTTON
-local fastBtn = Instance.new("TextButton", panel)
-fastBtn.Size = UDim2.new(0,120,0,30)
-fastBtn.Position = UDim2.new(0.5,-60,1,-120)
-fastBtn.Text = "FAST OFF"
-fastBtn.BackgroundColor3 = Color3.fromRGB(0,255,120)
-
-fastBtn.MouseButton1Click:Connect(function()
-    fastMode = not fastMode
-    if fastMode then task.spawn(function() optimizeMapLoop() end) end
-    fastBtn.Text = fastMode and "FAST ON" or "FAST OFF"
-end)
-
--- WHITE SCREEN BUTTON
-local whiteBtn = Instance.new("TextButton", panel)
-whiteBtn.Size = UDim2.new(0,120,0,30)
-whiteBtn.Position = UDim2.new(0.5,-60,1,-160)
-whiteBtn.Text = "WHITE SCREEN OFF"
-whiteBtn.BackgroundColor3 = Color3.fromRGB(255,255,255)
-whiteBtn.TextColor3 = Color3.fromRGB(0,0,0)
-
-whiteBtn.MouseButton1Click:Connect(function()
-    whiteScreenOn = not whiteScreenOn
-    whiteBtn.Text = whiteScreenOn and "WHITE SCREEN ON" or "WHITE SCREEN OFF"
-
-    if whiteScreenOn then
-        local frame = Instance.new("Frame", gui)
-        frame.Name = "WhiteOverlay"
-        frame.Size = UDim2.new(1,0,1,0)
-        frame.BackgroundColor3 = Color3.fromRGB(255,255,255)
-        frame.ZIndex = 0
-        frame.Active = false
-        frame.BackgroundTransparency = 0
-    else
-        local f = gui:FindFirstChild("WhiteOverlay")
-        if f then f:Destroy() end
-    end
-end)
-
--- SPEED SLIDERS พร้อมชื่อและค่าเรียลไทม์
-local function makeSlider(y, max, default, callback, name)
-    local label = Instance.new("TextLabel", panel)
-    label.Size = UDim2.new(0,200,0,20)
-    label.Position = UDim2.new(0,10,y-20)
-    label.TextColor3 = Color3.fromRGB(200,200,255)
-    label.BackgroundTransparency = 1
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 13
-
-    local val = default
-    label.Text = name .. ": " .. val
-
-    local track = Instance.new("Frame", panel)
-    track.Size = UDim2.new(1,-20,0,8)
-    track.Position = UDim2.new(0,10,0,y)
-    track.BackgroundColor3 = Color3.fromRGB(50,50,75)
-    Instance.new("UICorner", track).CornerRadius = UDim.new(1,0)
-
-    local fill = Instance.new("Frame", track)
-    fill.Size = UDim2.new(default/max,0,1,0)
-    fill.BackgroundColor3 = Color3.fromRGB(90,255,100)
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(1,0)
-
-    local knob = Instance.new("TextButton", track)
-    knob.Size = UDim2.new(0,18,0,18)
-    knob.Position = UDim2.new(default/max,-9,0.5,-9)
-    knob.BackgroundColor3 = Color3.fromRGB(220,220,255)
-    knob.Text = ""
-    Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
-
-    local dragging = false
-    knob.MouseButton1Down:Connect(function() dragging = true end)
-    UserInputService.InputEnded:Connect(function(i) dragging = false end)
-    UserInputService.InputChanged:Connect(function(i)
-        if dragging then
-            local r = math.clamp((i.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
-            val = math.floor(r*max)
-            fill.Size = UDim2.new(r,0,1,0)
-            knob.Position = UDim2.new(r,-9,0.5,-9)
-            label.Text = name .. ": " .. val
-            callback(val)
-        end
-    end)
-end
-
-makeSlider(50,20000,100,function(v) tweenSpeed=v end, "Farm Speed")
-makeSlider(90,10000,1000,function(v) tweenSpeed=v end, "Escape Speed")
-
--- LOOP FARM
-start.MouseButton1Click:Connect(function()
-    running = true
-    task.spawn(function()
-        while running do
-            local food = getClosestFood()
-            if food then moveTo(food) end
-            task.wait(updateRate)
-        end
-    end)
-end)
-
-stop.MouseButton1Click:Connect(function()
-    running = false
-    stopMover()
-end)
-
--- SET STATUS IDLE ด้านล่างสุด
-setStatus("Idle")
+setStatus("Ready")
