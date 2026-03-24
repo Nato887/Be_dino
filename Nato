@@ -5,6 +5,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
+local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 
@@ -14,12 +15,13 @@ local settings = {
     huntWeaker = false,
     avoidPlayers = false,
     antiVoid = true,
+    antiAFK = false, -- เพิ่มระบบ Anti AFK
     autoBoss = false,
     fastMode = false,
     tweenSpeed = 150,
 }
 
--- ── Get Root Part (Targeting Logic) ──
+-- ── Get Root Part ──
 local function getHRP()
     local char = player.Character
     if not char then return nil end
@@ -38,9 +40,9 @@ local function getGrowth(char)
     return root and (root.Size.X * root.Size.Y * root.Size.Z) or 0
 end
 
--- ================= GUI DESIGN (Sync Style) =================
+-- ================= GUI DESIGN =================
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "NatoHub_V20_Sync"; gui.ResetOnSpawn = false
+gui.Name = "NatoHub_V20_Final"; gui.ResetOnSpawn = false
 
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 520, 0, 340); main.Position = UDim2.new(0.5, -260, 0.5, -170)
@@ -93,7 +95,7 @@ createToggle(tabs.Tab1, "Hunt Smaller (10k+)", "huntWeaker")
 createToggle(tabs.Tab1, "Avoid Bigger (150s)", "avoidPlayers")
 createToggle(tabs.Tab1, "Anti Void (Raycast)", "antiVoid")
 
--- Slider Speed (Limit 300)
+-- Slider Speed
 local sCont = Instance.new("Frame", tabs.Tab1); sCont.Size = UDim2.new(0.95, 0, 0, 60); sCont.BackgroundTransparency = 1
 local sLab = Instance.new("TextLabel", sCont); sLab.Size = UDim2.new(1, 0, 0, 20); sLab.Text = "Tween Speed: 150"; sLab.TextColor3 = Color3.new(0.8,0.8,1); sLab.BackgroundTransparency = 1; sLab.Font = Enum.Font.GothamMedium
 local track = Instance.new("Frame", sCont); track.Size = UDim2.new(1, -20, 0, 8); track.Position = UDim2.new(0, 10, 0, 30); track.BackgroundColor3 = Color3.fromRGB(40,40,60); Instance.new("UICorner", track)
@@ -119,22 +121,44 @@ tBg.MouseButton1Click:Connect(function()
     tBg.BackgroundColor3 = settings.autoBoss and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(60, 50, 90)
 end)
 
-local function createMiscBtn(n, callback)
-    local b = Instance.new("TextButton", tabs.Tab2); b.Size = UDim2.new(0.95, 0, 0, 40); b.BackgroundColor3 = Color3.fromRGB(35, 30, 55); b.Text = n; b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold; Instance.new("UICorner", b)
+local function createMiscBtn(p, n, callback)
+    local b = Instance.new("TextButton", p); b.Size = UDim2.new(0.95, 0, 0, 40); b.BackgroundColor3 = Color3.fromRGB(35, 30, 55); b.Text = n; b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold; Instance.new("UICorner", b)
     b.MouseButton1Click:Connect(callback)
+    return b
 end
-createMiscBtn("Fast Mode (Optimize Rendering)", function() settings.fastMode = not settings.fastMode; RunService:Set3dRenderingEnabled(not settings.fastMode) end)
-createMiscBtn("Server Hop", function()
+
+-- เพิ่มปุ่ม Anti AFK ใน Tab 2
+local antiBtn = createMiscBtn(tabs.Tab2, "Anti-AFK: OFF", function() end)
+antiBtn.MouseButton1Click:Connect(function()
+    settings.antiAFK = not settings.antiAFK
+    antiBtn.Text = "Anti-AFK: " .. (settings.antiAFK and "ON" or "OFF")
+    antiBtn.BackgroundColor3 = settings.antiAFK and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(35, 30, 55)
+end)
+
+createMiscBtn(tabs.Tab2, "Fast Mode (Optimize Rendering)", function() 
+    settings.fastMode = not settings.fastMode
+    RunService:Set3dRenderingEnabled(not settings.fastMode) 
+end)
+
+createMiscBtn(tabs.Tab2, "Server Hop", function()
     local s = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=50"))
     for _, v in pairs(s.data) do if v.playing < v.maxPlayers and v.id ~= game.JobId then TeleportService:TeleportToPlaceInstance(game.PlaceId, v.id, player) break end end
 end)
 
--- ================= CORE LOGIC (MASTER SYNC) =================
+-- ================= CORE LOGIC =================
 local function isFloor(pos)
     if not settings.antiVoid then return true end
     local r = Ray.new(pos + Vector3.new(0, 10, 0), Vector3.new(0, -100, 0))
     return workspace:FindPartOnRayWithIgnoreList(r, {player.Character}) ~= nil
 end
+
+-- ระบบ Anti-AFK Logic
+player.Idled:Connect(function()
+    if settings.antiAFK then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end
+end)
 
 RunService.Heartbeat:Connect(function(dt)
     local hrp = getHRP()
@@ -146,7 +170,7 @@ RunService.Heartbeat:Connect(function(dt)
         hrp.Velocity = Vector3.zero; hrp.CFrame = CFrame.new(hrp.Position.X, 150, hrp.Position.Z); return
     end
 
-    -- 🏃 2. Avoid Players (Priority 1: Survival)
+    -- 🏃 2. Avoid Players (Priority 1)
     local isSafe = true
     if settings.avoidPlayers then
         for _, p in ipairs(Players:GetPlayers()) do
@@ -163,24 +187,11 @@ RunService.Heartbeat:Connect(function(dt)
             end
         end
     end
-    if not isSafe then return end -- หยุดถ้ากำลังหนี
+    if not isSafe then return end 
 
-    -- 🦖 3. Auto Boss (Priority 2: Boss Fight)
-    local bossTarget = nil
-    if settings.autoBoss then
-        -- ค้นหาบอสในแมพ (ปรับแก้ชื่อบอสตามเกมที่เล่น)
-        for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("Model") and (v.Name:find("Boss") or v.Name:find("Titan")) and v:FindFirstChild("HumanoidRootPart") then
-                bossTarget = v.HumanoidRootPart; break
-            end
-        end
-    end
-
-    -- 🎯 4. Targeting Priority (Hunt -> Food)
+    -- 🦖 3. Hunt & 🍗 4. Auto Food
     local targetPos = nil
-    if bossTarget then
-        targetPos = bossTarget.Position
-    elseif settings.huntWeaker then
+    if settings.huntWeaker then
         local nD = math.huge
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player and p.Character then
@@ -203,7 +214,7 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- Movement execution
+    -- Movement
     if targetPos then
         local mDir = (targetPos - hrp.Position).Unit
         local nextS = hrp.Position + (mDir * settings.tweenSpeed * dt)
@@ -214,6 +225,6 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- Nato Button Toggle
+-- Nato Button
 local nBtn = Instance.new("TextButton", gui); nBtn.Size = UDim2.new(0, 45, 0, 45); nBtn.Position = UDim2.new(0, 15, 0, 15); nBtn.BackgroundColor3 = Color3.fromRGB(130, 60, 255); nBtn.Text = "NATO"; nBtn.TextColor3 = Color3.new(1,1,1); nBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", nBtn).CornerRadius = UDim.new(1,0)
 nBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
