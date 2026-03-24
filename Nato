@@ -31,7 +31,7 @@ local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 480, 0, 320) 
 main.Position = UDim2.new(0.5, -240, 0.5, -160) 
 main.BackgroundColor3 = Color3.fromRGB(15, 12, 25)
-main.BorderSizePixel = 0; main.Active = true; main.Draggable = true
+main.Active = true; main.Draggable = true
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
 
 local stroke = Instance.new("UIStroke", main)
@@ -44,8 +44,7 @@ title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.BackgroundTranspar
 
 local sidebar = Instance.new("Frame", main)
 sidebar.Size = UDim2.new(0, 120, 1, -55); sidebar.Position = UDim2.new(0, 8, 0, 50)
-sidebar.BackgroundColor3 = Color3.fromRGB(22, 18, 35); sidebar.BorderSizePixel = 0
-Instance.new("UICorner", sidebar)
+sidebar.BackgroundColor3 = Color3.fromRGB(22, 18, 35); Instance.new("UICorner", sidebar)
 
 local container = Instance.new("Frame", main)
 container.Size = UDim2.new(1, -145, 1, -65); container.Position = UDim2.new(0, 135, 0, 55); container.BackgroundTransparency = 1
@@ -74,116 +73,105 @@ local function createTabBtn(name, yPos)
 end
 createTabBtn("Automation", 10); createTabBtn("Boss", 60)
 
--- ================= TAB 1: AUTOMATION =================
--- 1. [Speed Slider ส่วนที่แก้ไข: ย้ายข้อความขึ้นบน & รองรับมือถือ]
+-- ================= TAB 1: AUTOMATION (SPEED SLIDER) =================
 local sliderContainer = Instance.new("Frame", tabs.Automation)
-sliderContainer.Size = UDim2.new(1, 0, 0, 55); sliderContainer.BackgroundTransparency = 1
+sliderContainer.Size = UDim2.new(1, 0, 0, 60); sliderContainer.BackgroundTransparency = 1
 
 local sLabel = Instance.new("TextLabel", sliderContainer)
-sLabel.Size = UDim2.new(1, 0, 0, 20); sLabel.Position = UDim2.new(0, 0, 0, 0) -- ย้ายขึ้นด้านบน
-sLabel.Text = "Tween Speed: " .. settings.tweenSpeed; sLabel.TextColor3 = Color3.new(0.8, 0.8, 1); sLabel.BackgroundTransparency = 1; sLabel.Font = Enum.Font.GothamMedium
+sLabel.Size = UDim2.new(1, 0, 0, 20); sLabel.Text = "Tween Speed: " .. settings.tweenSpeed; sLabel.TextColor3 = Color3.new(0.8, 0.8, 1); sLabel.BackgroundTransparency = 1; sLabel.Font = Enum.Font.GothamMedium
 
 local track = Instance.new("Frame", sliderContainer)
-track.Size = UDim2.new(1, -10, 0, 8); track.Position = UDim2.new(0, 5, 0, 30)
+track.Size = UDim2.new(1, -20, 0, 8); track.Position = UDim2.new(0, 10, 0, 35)
 track.BackgroundColor3 = Color3.fromRGB(45, 45, 70); Instance.new("UICorner", track)
 
 local knob = Instance.new("Frame", track)
-knob.Size = UDim2.new(0, 20, 0, 20); knob.Position = UDim2.new(0.15, -10, 0.5, -10)
+knob.Size = UDim2.new(0, 22, 0, 22); knob.Position = UDim2.new(settings.tweenSpeed/1000, -11, 0.5, -11)
 knob.BackgroundColor3 = Color3.new(1,1,1); Instance.new("UICorner", knob)
 
--- ฟังก์ชันเลื่อน Slider สำหรับมือถือและ PC
-local function updateSlider(input)
-    local trackPos = track.AbsolutePosition.X
-    local trackSize = track.AbsoluteSize.X
-    local inputPos = input.Position.X
-    local relativePos = math.clamp((inputPos - trackPos) / trackSize, 0, 1)
-    
-    knob.Position = UDim2.new(relativePos, -10, 0.5, -10)
-    settings.tweenSpeed = math.floor(relativePos * 1000)
+local dragging = false
+local function moveSlider(input)
+    local ratio = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+    knob.Position = UDim2.new(ratio, -11, 0.5, -11)
+    settings.tweenSpeed = math.floor(ratio * 1000)
     sLabel.Text = "Tween Speed: " .. settings.tweenSpeed
 end
 
-local dragging = false
 knob.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-    end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        updateSlider(input)
-    end
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then moveSlider(input) end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-    end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
 end)
 
--- 2. Toggle Buttons อื่นๆ
 local function createToggle(parent, name, prop)
     local btn = Instance.new("TextButton", parent)
     btn.Size = UDim2.new(1, 0, 0, 45); btn.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(32, 28, 45)
-    btn.Text = "   " .. name; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamMedium
-    btn.TextXAlignment = Enum.TextXAlignment.Left; Instance.new("UICorner", btn)
+    btn.Text = "   " .. name; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamMedium; btn.TextXAlignment = Enum.TextXAlignment.Left; Instance.new("UICorner", btn)
     btn.MouseButton1Click:Connect(function()
         settings[prop] = not settings[prop]
         TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(32, 28, 45)}):Play()
     end)
 end
 
-createToggle(tabs.Automation, "Auto Feed (Tween)", "autoFood")
+createToggle(tabs.Automation, "Auto Food (Tween)", "autoFood")
 createToggle(tabs.Automation, "Eat Smaller Dino (Hunt)", "huntWeaker")
 createToggle(tabs.Automation, "Avoid Bigger Dino (150s)", "avoidPlayers")
-createToggle(tabs.Automation, "Anti Void", "antiVoid")
+createToggle(tabs.Automation, "Anti Void (Raycast)", "antiVoid")
 
--- ================= TAB 2: BOSS (Auto QTE) =================
-local bossFrame = Instance.new("Frame", tabs.Boss)
-bossFrame.Size = UDim2.new(1, 0, 0, 120); bossFrame.BackgroundColor3 = Color3.fromRGB(28, 24, 42); Instance.new("UICorner", bossFrame)
+-- ================= CORE LOGIC (WITH ADVANCED ANTI-VOID) =================
 
-local bTitle = Instance.new("TextLabel", bossFrame); bTitle.Size = UDim2.new(0, 150, 0, 35); bTitle.Position = UDim2.new(0, 12, 0, 8)
-bTitle.Text = "Auto Boss"; bTitle.TextColor3 = Color3.new(1,1,1); bTitle.Font = Enum.Font.GothamBold; bTitle.BackgroundTransparency = 1; bTitle.TextXAlignment = Enum.TextXAlignment.Left
+-- ฟังก์ชันเช็คว่าข้างหน้ามีพื้นไหม
+local function isFloorAhead(pos)
+    if not settings.antiVoid then return true end
+    local ray = Ray.new(pos + Vector3.new(0, 5, 0), Vector3.new(0, -50, 0)) -- ยิงเลเซอร์ลงพื้น 50 Studs
+    local hit = workspace:FindPartOnRayWithIgnoreList(ray, {player.Character})
+    return hit ~= nil
+end
 
-local tBg = Instance.new("TextButton", bossFrame); tBg.Size = UDim2.new(0, 48, 0, 24); tBg.Position = UDim2.new(1, -60, 0, 15)
-tBg.BackgroundColor3 = Color3.fromRGB(60, 55, 80); tBg.Text = ""; Instance.new("UICorner", tBg).CornerRadius = UDim.new(1,0)
-local tCircle = Instance.new("Frame", tBg); tCircle.Size = UDim2.new(0, 20, 0, 20); tCircle.Position = settings.autoBoss and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
-tCircle.BackgroundColor3 = Color3.new(1,1,1); Instance.new("UICorner", tCircle)
-
-local bDesc = Instance.new("TextLabel", bossFrame); bDesc.Size = UDim2.new(1, -25, 0, 70); bDesc.Position = UDim2.new(0, 12, 0, 45)
-bDesc.Text = "Boss: Off\nAuto responds to boss skill checks\nFires attack within 0.15s of each QTE"; bDesc.TextColor3 = Color3.fromRGB(160, 160, 170)
-bDesc.Font = Enum.Font.Gotham; bDesc.TextSize = 12; bDesc.BackgroundTransparency = 1; bDesc.TextXAlignment = Enum.TextXAlignment.Left; bDesc.TextYAlignment = Enum.TextYAlignment.Top
-
-tBg.MouseButton1Click:Connect(function()
-    settings.autoBoss = not settings.autoBoss
-    TweenService:Create(tCircle, TweenInfo.new(0.2), {Position = settings.autoBoss and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)}):Play()
-    TweenService:Create(tBg, TweenInfo.new(0.2), {BackgroundColor3 = settings.autoBoss and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(60, 55, 80)}):Play()
-    bDesc.Text = "Boss: "..(settings.autoBoss and "On" or "Off").."\nAuto responds to boss skill checks\nFires attack within 0.15s of each QTE"
-end)
-
--- ================= CORE LOGIC (Tween & Movement) =================
 RunService.Heartbeat:Connect(function(dt)
     local hrp = getHRP()
     if not hrp then return end
 
-    if settings.antiVoid and hrp.Position.Y < -60 then
-        hrp.Velocity = Vector3.new(0,0,0); hrp.CFrame = CFrame.new(hrp.Position.X, 150, hrp.Position.Z); return
+    -- 🛡️ 1. Ultra Anti-Void (ตกไปแล้วดึงกลับ)
+    if settings.antiVoid and hrp.Position.Y < -30 then
+        hrp.Velocity = Vector3.new(0, 0, 0)
+        hrp.CFrame = CFrame.new(hrp.Position.X, 150, hrp.Position.Z)
+        return
     end
 
+    -- 🏃 2. Avoid Logic (หนีคนตัวใหญ่)
     if settings.avoidPlayers then
+        local nearestBigger = nil
+        local minDist = 150
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                 local eRoot = p.Character.HumanoidRootPart
-                if (hrp.Position - eRoot.Position).Magnitude < 150 and eRoot.Size.Magnitude > hrp.Size.Magnitude then
-                    local escapeDir = (hrp.Position - eRoot.Position).Unit
-                    hrp.CFrame = hrp.CFrame + (escapeDir * settings.tweenSpeed * dt)
-                    hrp.Velocity = Vector3.new(0, 0.1, 0); return
+                local dist = (hrp.Position - eRoot.Position).Magnitude
+                if dist < minDist and eRoot.Size.Magnitude > hrp.Size.Magnitude then
+                    nearestBigger = eRoot; minDist = dist
                 end
+            end
+        end
+
+        if nearestBigger then
+            local escapeDir = (hrp.Position - nearestBigger.Position).Unit
+            local targetPos = hrp.Position + (escapeDir * settings.tweenSpeed * dt)
+            
+            -- ตรวจสอบก่อนหนีว่าข้างหน้ามีพื้นไหม ถ้าไม่มีจะหยุดหนีเพื่อไม่ให้ตกแมพ
+            if isFloorAhead(targetPos) then
+                hrp.CFrame = CFrame.new(targetPos.X, hrp.Position.Y, targetPos.Z)
+                hrp.Velocity = Vector3.new(0, 0.5, 0)
+                return
             end
         end
     end
 
+    -- 🦖 3. Hunt & 🍖 4. Auto Food
     local target = nil
     if settings.huntWeaker then
         for _, p in ipairs(Players:GetPlayers()) do
@@ -198,14 +186,23 @@ RunService.Heartbeat:Connect(function(dt)
         for _, v in ipairs(CollectionService:GetTagged("Food")) do if v and v.Parent then target = v; break end end
     end
 
+    -- เคลื่อนที่ไปหาเป้าหมาย (พร้อมเช็คพื้น)
     if target then
         local tPos = (target:IsA("Model") and target:GetPivot().Position) or target.Position
-        hrp.CFrame = hrp.CFrame + ((tPos - hrp.Position).Unit * settings.tweenSpeed * dt)
-        hrp.Velocity = Vector3.new(0, 0.1, 0)
+        local moveDir = (tPos - hrp.Position).Unit
+        local nextStep = hrp.Position + (moveDir * settings.tweenSpeed * dt)
+        
+        -- ตรวจสอบพื้นก่อนพุ่งไป
+        if isFloorAhead(nextStep) then
+            hrp.CFrame = CFrame.new(nextStep)
+            hrp.Velocity = Vector3.new(0, 0.1, 0)
+        else
+            -- ถ้าไม่มีพื้น ให้หยุดเดินทันที
+            hrp.Velocity = Vector3.new(0, 0, 0)
+        end
     end
 end)
 
--- Toggle Menu Button
-local natoBtn = Instance.new("TextButton", gui); natoBtn.Size = UDim2.new(0, 45, 0, 45); natoBtn.Position = UDim2.new(0, 15, 0, 15); natoBtn.BackgroundColor3 = Color3.fromRGB(130, 60, 255)
-natoBtn.Text = "NATO"; natoBtn.TextColor3 = Color3.new(1,1,1); natoBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", natoBtn).CornerRadius = UDim.new(1,0)
+-- Nato Button
+local natoBtn = Instance.new("TextButton", gui); natoBtn.Size = UDim2.new(0, 45, 0, 45); natoBtn.Position = UDim2.new(0, 15, 0, 15); natoBtn.BackgroundColor3 = Color3.fromRGB(130, 60, 255); natoBtn.Text = "NATO"; natoBtn.TextColor3 = Color3.new(1,1,1); natoBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", natoBtn).CornerRadius = UDim.new(1,0)
 natoBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
