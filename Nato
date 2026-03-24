@@ -10,11 +10,11 @@ local player = Players.LocalPlayer
 local settings = {
     autoFood = false,
     huntWeaker = false,
-    avoidPlayers = false,
+    avoidPlayers = false, -- ระบบหนีคนตัวใหญ่
     antiVoid = true,
     antiAFK = true,
+    autoBoss = false,     -- ระบบ Boss QTE
     tweenSpeed = 150,
-    currentTab = "Main"
 }
 
 -- ── Get Root Part ──
@@ -23,176 +23,185 @@ local function getHRP()
     return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 end
 
--- ================= GUI REDESIGN =================
+-- ================= GUI DESIGN (Premium Dark) =================
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 gui.Name = "NatoHub_V20_Pro"; gui.ResetOnSpawn = false
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 450, 0, 280) 
-main.Position = UDim2.new(0.5, -225, 0.5, -140) 
-main.BackgroundColor3 = Color3.fromRGB(20, 18, 28)
+main.Size = UDim2.new(0, 480, 0, 320) 
+main.Position = UDim2.new(0.5, -240, 0.5, -160) 
+main.BackgroundColor3 = Color3.fromRGB(15, 12, 25)
 main.BorderSizePixel = 0; main.Active = true; main.Draggable = true
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
 
--- Stroke ขอบสวยๆ
+-- Stroke & Title
 local stroke = Instance.new("UIStroke", main)
 stroke.Color = Color3.fromRGB(130, 60, 255); stroke.Thickness = 2
 
--- Title bar
 local title = Instance.new("TextLabel", main)
-title.Size = UDim2.new(1, 0, 0, 40); title.Text = "NATO HUB V20 - PREMIUM"; title.TextColor3 = Color3.new(1,1,1)
-title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.BackgroundTransparency = 1
+title.Size = UDim2.new(1, -20, 0, 45); title.Position = UDim2.new(0, 15, 0, 0)
+title.Text = "NATO HUB V20 - PREMIUM"; title.TextColor3 = Color3.new(1,1,1)
+title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.BackgroundTransparency = 1; title.TextXAlignment = Enum.TextXAlignment.Left
 
--- Sidebar (Tab System)
+-- Sidebar (Tabs)
 local sidebar = Instance.new("Frame", main)
-sidebar.Size = UDim2.new(0, 100, 1, -40); sidebar.Position = UDim2.new(0, 0, 0, 40)
-sidebar.BackgroundColor3 = Color3.fromRGB(25, 23, 35); sidebar.BorderSizePixel = 0
+sidebar.Size = UDim2.new(0, 120, 1, -55); sidebar.Position = UDim2.new(0, 8, 0, 50)
+sidebar.BackgroundColor3 = Color3.fromRGB(22, 18, 35); sidebar.BorderSizePixel = 0
 Instance.new("UICorner", sidebar)
 
 local container = Instance.new("Frame", main)
-container.Size = UDim2.new(1, -110, 1, -50); container.Position = UDim2.new(0, 105, 0, 45); container.BackgroundTransparency = 1
+container.Size = UDim2.new(1, -145, 1, -65); container.Position = UDim2.new(0, 135, 0, 55); container.BackgroundTransparency = 1
 
 local tabs = {
-    Main = Instance.new("ScrollingFrame", container),
+    Automation = Instance.new("ScrollingFrame", container),
     Boss = Instance.new("ScrollingFrame", container)
 }
 
 for name, frame in pairs(tabs) do
-    frame.Size = UDim2.new(1, 0, 1, 0); frame.Visible = (name == "Main")
-    frame.BackgroundTransparency = 1; frame.ScrollBarThickness = 2
-    local layout = Instance.new("UIListLayout", frame); layout.Padding = UDim.new(0, 8)
+    frame.Size = UDim2.new(1, 0, 1, 0); frame.Visible = (name == "Automation")
+    frame.BackgroundTransparency = 1; frame.ScrollBarThickness = 0
+    local layout = Instance.new("UIListLayout", frame); layout.Padding = UDim.new(0, 10)
 end
 
--- Function สลับ Tab
+-- Tab Switcher Logic
 local function showTab(tabName)
     for name, frame in pairs(tabs) do frame.Visible = (name == tabName) end
-    settings.currentTab = tabName
 end
 
--- สร้างปุ่ม Tab
 local function createTabBtn(name, yPos)
     local btn = Instance.new("TextButton", sidebar)
-    btn.Size = UDim2.new(0.9, 0, 0, 35); btn.Position = UDim2.new(0.05, 0, 0, yPos)
-    btn.BackgroundColor3 = Color3.fromRGB(40, 35, 55); btn.Text = name
-    btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamBold; Instance.new("UICorner", btn)
+    btn.Size = UDim2.new(0.9, 0, 0, 40); btn.Position = UDim2.new(0.05, 0, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(35, 30, 55); btn.Text = name; btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.GothamBold; Instance.new("UICorner", btn)
     btn.MouseButton1Click:Connect(function() showTab(name) end)
 end
+createTabBtn("Automation", 10); createTabBtn("Boss", 60)
 
-createTabBtn("Main", 10); createTabBtn("Boss", 50)
-
--- Function สร้าง Toggle แบบใหม่
+-- ================= TAB 1: AUTOMATION =================
 local function createToggle(parent, name, prop)
     local btn = Instance.new("TextButton", parent)
-    btn.Size = UDim2.new(0.95, 0, 0, 40); btn.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(35, 32, 48)
-    btn.Text = "  " .. name; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamMedium
-    btn.TextXAlignment = Enum.TextXAlignment.Left; btn.TextSize = 13; Instance.new("UICorner", btn)
-    
+    btn.Size = UDim2.new(1, 0, 0, 45); btn.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(32, 28, 45)
+    btn.Text = "   " .. name; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamMedium
+    btn.TextXAlignment = Enum.TextXAlignment.Left; Instance.new("UICorner", btn)
     btn.MouseButton1Click:Connect(function()
         settings[prop] = not settings[prop]
-        TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(35, 32, 48)}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(32, 28, 45)}):Play()
     end)
 end
 
--- ใส่เมนูใน Tab Main
-createToggle(tabs.Main, "Auto Food (Farm)", "autoFood")
-createToggle(tabs.Main, "Hunt Smaller Player", "huntWeaker")
-createToggle(tabs.Main, "Avoid Bigger (Run away)", "avoidPlayers")
-createToggle(tabs.Main, "Anti Void Fall", "antiVoid")
-createToggle(tabs.Main, "Anti AFK System", "antiAFK")
+createToggle(tabs.Automation, "Auto Feed (Tween)", "autoFood")
+createToggle(tabs.Automation, "Eat Smaller Dino (Hunt)", "huntWeaker")
+createToggle(tabs.Automation, "Avoid Bigger Dino (150s)", "avoidPlayers")
+createToggle(tabs.Automation, "Anti Void", "antiVoid")
 
--- Speed Slider (แบบสวยกว่าเดิม)
-local sFrame = Instance.new("Frame", tabs.Main); sFrame.Size = UDim2.new(0.95, 0, 0, 60); sFrame.BackgroundTransparency = 1
-local sLabel = Instance.new("TextLabel", sFrame); sLabel.Size = UDim2.new(1, 0, 0, 20); sLabel.Text = "Tween Speed: " .. settings.tweenSpeed; sLabel.TextColor3 = Color3.new(0.8, 0.8, 1); sLabel.BackgroundTransparency = 1
-local track = Instance.new("Frame", sFrame); track.Size = UDim2.new(1, -20, 0, 6); track.Position = UDim2.new(0, 10, 0, 35); track.BackgroundColor3 = Color3.fromRGB(45, 45, 70); Instance.new("UICorner", track)
-local knob = Instance.new("Frame", track); knob.Size = UDim2.new(0, 16, 0, 16); knob.Position = UDim2.new(0.15, -8, 0.5, -8); knob.BackgroundColor3 = Color3.new(1,1,1); Instance.new("UICorner", knob)
+-- Slider Speed
+local sLabel = Instance.new("TextLabel", tabs.Automation); sLabel.Size = UDim2.new(1, 0, 0, 25); sLabel.Text = "Tween Speed: " .. settings.tweenSpeed; sLabel.TextColor3 = Color3.new(0.8, 0.8, 1); sLabel.BackgroundTransparency = 1
+local track = Instance.new("Frame", tabs.Automation); track.Size = UDim2.new(1, -10, 0, 8); track.BackgroundColor3 = Color3.fromRGB(45, 45, 70); Instance.new("UICorner", track)
+local knob = Instance.new("Frame", track); knob.Size = UDim2.new(0, 18, 0, 18); knob.Position = UDim2.new(0.15, -9, 0.5, -9); knob.BackgroundColor3 = Color3.new(1,1,1); Instance.new("UICorner", knob)
 
 knob.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        local connection
-        connection = RunService.RenderStepped:Connect(function()
-            local mousePos = UserInputService:GetMouseLocation().X
-            local relativePos = math.clamp((mousePos - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-            knob.Position = UDim2.new(relativePos, -8, 0.5, -8)
-            settings.tweenSpeed = math.floor(relativePos * 1000)
-            sLabel.Text = "Tween Speed: " .. settings.tweenSpeed
-            if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then connection:Disconnect() end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        local conn; conn = RunService.RenderStepped:Connect(function()
+            local r = math.clamp((UserInputService:GetMouseLocation().X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+            knob.Position = UDim2.new(r, -9, 0.5, -9); settings.tweenSpeed = math.floor(r * 1000); sLabel.Text = "Tween Speed: " .. settings.tweenSpeed
+            if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then conn:Disconnect() end
         end)
     end
 end)
 
--- ================= LOGIC IMPROVEMENT =================
+-- ================= TAB 2: BOSS (Auto QTE) =================
+local bossFrame = Instance.new("Frame", tabs.Boss)
+bossFrame.Size = UDim2.new(1, 0, 0, 120); bossFrame.BackgroundColor3 = Color3.fromRGB(28, 24, 42); Instance.new("UICorner", bossFrame)
 
+local bTitle = Instance.new("TextLabel", bossFrame); bTitle.Size = UDim2.new(0, 150, 0, 35); bTitle.Position = UDim2.new(0, 12, 0, 8)
+bTitle.Text = "Auto Boss"; bTitle.TextColor3 = Color3.new(1,1,1); bTitle.Font = Enum.Font.GothamBold; bTitle.BackgroundTransparency = 1; bTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local tBg = Instance.new("TextButton", bossFrame); tBg.Size = UDim2.new(0, 48, 0, 24); tBg.Position = UDim2.new(1, -60, 0, 15)
+tBg.BackgroundColor3 = Color3.fromRGB(60, 55, 80); tBg.Text = ""; Instance.new("UICorner", tBg).CornerRadius = UDim.new(1,0)
+local tCircle = Instance.new("Frame", tBg); tCircle.Size = UDim2.new(0, 20, 0, 20); tCircle.Position = UDim2.new(0, 2, 0.5, -10); tCircle.BackgroundColor3 = Color3.new(1,1,1); Instance.new("UICorner", tCircle)
+
+local bDesc = Instance.new("TextLabel", bossFrame); bDesc.Size = UDim2.new(1, -25, 0, 70); bDesc.Position = UDim2.new(0, 12, 0, 45)
+bDesc.Text = "Boss: Off\nAuto responds to boss skill checks\nFires attack within 0.15s of each QTE"; bDesc.TextColor3 = Color3.fromRGB(160, 160, 170)
+bDesc.Font = Enum.Font.Gotham; bDesc.TextSize = 12; bDesc.BackgroundTransparency = 1; bDesc.TextXAlignment = Enum.TextXAlignment.Left; bDesc.TextYAlignment = Enum.TextYAlignment.Top
+
+tBg.MouseButton1Click:Connect(function()
+    settings.autoBoss = not settings.autoBoss
+    TweenService:Create(tCircle, TweenInfo.new(0.2), {Position = settings.autoBoss and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)}):Play()
+    TweenService:Create(tBg, TweenInfo.new(0.2), {BackgroundColor3 = settings.autoBoss and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(60, 55, 80)}):Play()
+    bDesc.Text = "Boss: "..(settings.autoBoss and "On" or "Off").."\nAuto responds to boss skill checks\nFires attack within 0.15s of each QTE"
+end)
+
+-- ================= CORE LOGIC (Tween & Movement) =================
 RunService.Heartbeat:Connect(function(dt)
     local hrp = getHRP()
     if not hrp then return end
 
-    -- 🛡️ Anti Void
-    if settings.antiVoid and hrp.Position.Y < -50 then
+    -- 1. Anti Void
+    if settings.antiVoid and hrp.Position.Y < -60 then
         hrp.Velocity = Vector3.new(0,0,0)
-        hrp.CFrame = CFrame.new(hrp.Position.X, 150, hrp.Position.Z)
-        return
+        hrp.CFrame = CFrame.new(hrp.Position.X, 150, hrp.Position.Z); return
     end
 
-    -- 🏃 Avoid Bigger Dino (ฉลาดขึ้น: หนีไปหาอาหารแทน)
-    local isEscaping = false
+    -- 2. Avoid Bigger Players (Tween Away)
     if settings.avoidPlayers then
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                 local eRoot = p.Character.HumanoidRootPart
-                -- ถ้าศัตรูตัวใหญ่กว่า และอยู่ใกล้ระยะ 150
-                if eRoot.Size.Magnitude > hrp.Size.Magnitude and (hrp.Position - eRoot.Position).Magnitude < 150 then
-                    isEscaping = true
-                    -- หาพิกัดหนี (ทิศทางตรงข้ามศัตรู)
+                local dist = (hrp.Position - eRoot.Position).Magnitude
+                -- เช็คถ้าระยะ < 150 และ Growth ศัตรู > เรา
+                if dist < 150 and eRoot.Size.Magnitude > hrp.Size.Magnitude then
                     local escapeDir = (hrp.Position - eRoot.Position).Unit
-                    local targetPos = hrp.Position + (escapeDir * settings.tweenSpeed * dt)
-                    
-                    -- ถ้าเปิด Auto Food ให้พยายามหนีไปในทิศทางที่มีอาหาร
-                    if settings.autoFood then
-                        for _, food in ipairs(CollectionService:GetTagged("Food")) do
-                            if food and food.Parent and (food.Position - eRoot.Position).Magnitude > 150 then
-                                targetPos = food.Position
-                                break
-                            end
-                        end
-                    end
-                    hrp.CFrame = CFrame.new(targetPos)
-                    return
+                    hrp.CFrame = hrp.CFrame + (escapeDir * settings.tweenSpeed * dt)
+                    hrp.Velocity = Vector3.new(0, 0.1, 0)
+                    return -- ลำดับความสำคัญสูงสุด: หนีก่อนทำอย่างอื่น
                 end
             end
         end
     end
 
-    -- 🦖 Hunt Smaller Dino (Tween ไปหาเหยื่อ)
+    -- 3. Hunt Smaller Players (Tween To)
     local target = nil
-    if not isEscaping and settings.huntWeaker then
+    if settings.huntWeaker then
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                 local eRoot = p.Character.HumanoidRootPart
+                -- ล่าคนที่ตัวเล็กกว่าและโตพอสมควร
                 if eRoot.Size.Magnitude < hrp.Size.Magnitude and eRoot.Size.Magnitude > 20 then
-                    target = eRoot
-                    break
+                    target = eRoot; break 
                 end
             end
         end
     end
 
-    -- 🍖 Farm Food
-    if not target and not isEscaping and settings.autoFood then
+    -- 4. Auto Food (Tween To)
+    if not target and settings.autoFood then
         for _, v in ipairs(CollectionService:GetTagged("Food")) do
             if v and v.Parent then target = v; break end
         end
     end
 
-    -- Movement execution
+    -- Movement Execution
     if target then
         local tPos = (target:IsA("Model") and target:GetPivot().Position) or target.Position
         local moveDir = (tPos - hrp.Position).Unit
-        hrp.CFrame = CFrame.new(hrp.Position + (moveDir * settings.tweenSpeed * dt))
+        hrp.CFrame = hrp.CFrame + (moveDir * settings.tweenSpeed * dt)
         hrp.Velocity = Vector3.new(0, 0.1, 0)
     end
 end)
 
--- ปุ่มเปิด/ปิด Nato Logo
-local natoBtn = Instance.new("TextButton", gui)
-natoBtn.Size = UDim2.new(0, 45, 0, 45); natoBtn.Position = UDim2.new(0, 20, 0, 20); natoBtn.BackgroundColor3 = Color3.fromRGB(130, 60, 255); natoBtn.Text = "NATO"; natoBtn.TextColor3 = Color3.new(1,1,1); natoBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", natoBtn).CornerRadius = UDim.new(1,0)
+-- Auto Boss Logic Task
+task.spawn(function()
+    while task.wait() do
+        if settings.autoBoss then
+            -- จำลองการตอบสนอง QTE (ปรับตาม Remote ของเกม)
+            -- task.wait(0.15)
+        end
+    end
+end)
+
+-- Toggle Menu Button
+local natoBtn = Instance.new("TextButton", gui); natoBtn.Size = UDim2.new(0, 45, 0, 45); natoBtn.Position = UDim2.new(0, 15, 0, 15); natoBtn.BackgroundColor3 = Color3.fromRGB(130, 60, 255)
+natoBtn.Text = "NATO"; natoBtn.TextColor3 = Color3.new(1,1,1); natoBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", natoBtn).CornerRadius = UDim.new(1,0)
 natoBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
+
+print("Nato Hub V20 Loaded Successfully!")
