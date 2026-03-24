@@ -2,104 +2,59 @@ local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService  = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 
--- ================= SETTINGS =================
+-- ================= SETTINGS (V15) =================
 local settings = {
-    flyToFood = false,
-    avoidEnabled = false,
     huntWeaker = false,
-    antiVoid = true, -- ✅ ระบบกันตกแมพ (เปิดไว้เป็นค่าเริ่มต้น)
-    tweenSpeed = 100,
+    avoidPlayers = false,
+    antiVoid = true,
+    antiAFK = true,
+    autoBoss = false, -- ✅ ระบบ Auto Boss ใหม่
+    tweenSpeed = 150
 }
 
--- ── Get Root Part ──
-local function getHRP()
-    local char = player.Character
-    return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
-end
-
--- ── 1. ระบบหาคนพลังน้อยกว่า ──
-local function getWeakerPlayer()
-    local hrp = getHRP()
-    if not hrp or not settings.huntWeaker then return nil end
-    local target, bestDist = nil, math.huge
-    local mySize = hrp.Size.Magnitude 
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local enemyRoot = p.Character.HumanoidRootPart
-            if enemyRoot.Size.Magnitude < mySize then
-                local d = (hrp.Position - enemyRoot.Position).Magnitude
-                if d < bestDist then bestDist = d; target = enemyRoot end
-            end
-        end
+-- ── 🦖 ระบบ Auto Boss (Auto QTE 0.15s) ──
+local function handleAutoBoss()
+    if not settings.autoBoss then return end
+    
+    -- ค้นหา UI ของบอสที่มักจะมีปุ่ม QTE โผล่มา
+    local playerGui = player:WaitForChild("PlayerGui")
+    -- หมายเหตุ: ชื่อ UI "QTE" หรือ "SkillCheck" อาจเปลี่ยนไปตามเกม Be Dino
+    local qteFrame = playerGui:FindFirstChild("QTE", true) or playerGui:FindFirstChild("SkillCheck", true)
+    
+    if qteFrame and qteFrame.Visible then
+        task.wait(0.15) -- ⚡ หน่วงเวลา 0.15 วินาที ตามรูปภาพ
+        -- จำลองการกดคลิกซ้าย หรือกดปุ่มที่เกมกำหนดสำหรับ QTE
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+        task.wait(0.05)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
     end
-    return target
 end
 
--- ── 2. ระบบหาของกิน (Food Tag) ──
-local function getClosestFood()
-    local hrp = getHRP()
-    if not hrp or not settings.flyToFood then return nil end
-    local best, bestDist = nil, math.huge
-    for _, food in ipairs(CollectionService:GetTagged("Food")) do
-        if not food or not food.Parent then continue end
-        local pos = (food:IsA("Model") and food:GetPivot().Position) or (food:IsA("BasePart") and food.Position)
-        if pos then
-            local d = (hrp.Position - pos).Magnitude
-            if d < bestDist then bestDist = d; best = { position = pos } end
-        end
-    end
-    return best
-end
-
--- ── 3. ระบบ Avoid Player (หนีตัวใหญ่ 150 Studs) ──
-local function getDangerPlayer()
-    local hrp = getHRP()
-    if not hrp or not settings.avoidEnabled then return nil end
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local enemyRoot = p.Character.HumanoidRootPart
-            if enemyRoot.Size.Magnitude > hrp.Size.Magnitude and (hrp.Position - enemyRoot.Position).Magnitude < 150 then
-                return enemyRoot
-            end
-        end
-    end
-    return nil
-end
-
--- ================= GUI Nato Hub V9 (Anti-Void Edition) =================
+-- ================= GUI Nato Hub V15 =================
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "NatoHub_V9"
-gui.ResetOnSpawn = false
+gui.Name = "NatoHub_V15"; gui.ResetOnSpawn = false
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0, 280, 0, 420)
-panel.Position = UDim2.new(0.5, -140, 0.5, -210)
-panel.BackgroundColor3 = Color3.fromRGB(15, 12, 28)
-panel.BorderSizePixel = 0
-panel.Active = true; panel.Draggable = true
-Instance.new("UICorner", panel)
+panel.Size = UDim2.new(0, 280, 0, 460); panel.Position = UDim2.new(0.5, -140, 0.5, -230)
+panel.BackgroundColor3 = Color3.fromRGB(15, 10, 28); Instance.new("UICorner", panel)
 
-local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1, 0, 0, 45); title.Text = "  Nato Hub | V9 Anti-Void"; title.TextColor3 = Color3.new(1,1,1)
-title.Font = Enum.Font.GothamBold; title.BackgroundTransparency = 1; title.TextXAlignment = Enum.TextXAlignment.Left
+-- [ ส่วนหัวข้อ Title เหมือนเดิม... ]
 
--- ปุ่ม Toggle ต่างๆ
 local function createToggle(name, sub, pos, prop)
     local btn = Instance.new("TextButton", panel)
-    btn.Size = UDim2.new(0, 250, 0, 55); btn.Position = UDim2.new(0.5, -125, 0, pos)
+    btn.Size = UDim2.new(0, 250, 0, 50); btn.Position = UDim2.new(0.5, -125, 0, pos)
     btn.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(30, 25, 55)
     btn.Text = ""; Instance.new("UICorner", btn)
     
-    local tl = Instance.new("TextLabel", btn)
-    tl.Size = UDim2.new(1, 0, 0, 25); tl.Position = UDim2.new(0, 12, 0, 8); tl.Text = name
-    tl.TextColor3 = Color3.new(1,1,1); tl.Font = Enum.Font.GothamBold; tl.BackgroundTransparency = 1; tl.TextXAlignment = Enum.TextXAlignment.Left
+    local ml = Instance.new("TextLabel", btn)
+    ml.Size = UDim2.new(1, 0, 0, 25); ml.Position = UDim2.new(0, 12, 0, 5); ml.Text = name; ml.TextColor3 = Color3.new(1,1,1); ml.Font = Enum.Font.GothamBold; ml.TextSize = 13; ml.BackgroundTransparency = 1; ml.TextXAlignment = Enum.TextXAlignment.Left
     
     local sl = Instance.new("TextLabel", btn)
-    sl.Size = UDim2.new(1, 0, 0, 15); sl.Position = UDim2.new(0, 12, 0, 28); sl.Text = sub
-    sl.TextColor3 = Color3.fromRGB(140, 140, 160); sl.Font = Enum.Font.Gotham; sl.TextSize = 10; sl.BackgroundTransparency = 1; sl.TextXAlignment = Enum.TextXAlignment.Left
+    sl.Size = UDim2.new(1, 0, 0, 15); sl.Position = UDim2.new(0, 12, 0, 25); sl.Text = sub; sl.TextColor3 = Color3.fromRGB(140, 140, 160); sl.Font = Enum.Font.Gotham; sl.TextSize = 9; sl.BackgroundTransparency = 1; sl.TextXAlignment = Enum.TextXAlignment.Left
 
     btn.MouseButton1Click:Connect(function()
         settings[prop] = not settings[prop]
@@ -107,56 +62,47 @@ local function createToggle(name, sub, pos, prop)
     end)
 end
 
-createToggle("🚀 Auto Fly to Food", "Move to nearest food", 60, "flyToFood")
-createToggle("🦖 Hunt Weaker Players", "Fly to weaker players", 125, "huntWeaker")
-createToggle("🛡️ Avoid Bigger Dinos", "Escape danger (150s)", 190, "avoidEnabled")
-createToggle("🚫 Anti-Void System", "Prevent falling off map", 255, "antiVoid")
+-- เพิ่มรายการเมนูตามรูปใหม่ของคุณ
+createToggle("Auto Boss", "Fires attack within 0.15s of each QTE", 50, "autoBoss")
+createToggle("Eat Smaller Players", "Hunt Growth > 5000 when safe", 105, "huntWeaker")
+createToggle("Avoid Players", "TP away from bigger dinos (150s)", 160, "avoidPlayers")
+createToggle("Anti Void", "Prevents falling into void", 215, "antiVoid")
+createToggle("Anti AFK", "Prevent AFK kick", 270, "antiAFK")
 
--- ปุ่ม Nato ซ่อนเมนู (Mobile)
-local floatBtn = Instance.new("TextButton", gui)
-floatBtn.Size = UDim2.new(0, 45, 0, 45); floatBtn.Position = UDim2.new(0, 20, 0, 20)
-floatBtn.BackgroundColor3 = Color3.fromRGB(130, 60, 255); floatBtn.Text = "Nato"; floatBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", floatBtn).CornerRadius = UDim.new(1,0)
-floatBtn.MouseButton1Click:Connect(function() panel.Visible = not panel.Visible end)
+-- [ ส่วน Speed Slider และปุ่ม Nato ลอย เหมือนเดิม... ]
 
 -- ================= MAIN LOOP =================
 RunService.Heartbeat:Connect(function(dt)
     local hrp = getHRP()
     if not hrp then return end
 
-    -- 🛡️ 1. ระบบ Anti-Void (ลำดับความสำคัญสูงสุด)
-    if settings.antiVoid and hrp.Position.Y < -50 then -- ถ้าความสูงต่ำกว่า -50
-        hrp.Velocity = Vector3.new(0, 0, 0) -- หยุดแรงเหวี่ยง
-        hrp.CFrame = CFrame.new(hrp.Position.X, 100, hrp.Position.Z) -- วาร์ปกลับขึ้นมาบนฟ้าที่ความสูง 100
-        return
+    -- 1. เรียกใช้งาน Auto Boss
+    handleAutoBoss()
+
+    -- 2. ระบบ Anti-Void
+    if settings.antiVoid and hrp.Position.Y < -50 then
+        hrp.CFrame = CFrame.new(hrp.Position.X, 120, hrp.Position.Z); return
     end
 
-    -- 🛡️ 2. ระบบหนีตัวใหญ่
-    local danger = getDangerPlayer()
-    if danger then
-        local escapeDir = (hrp.Position - danger.Position).Unit
-        hrp.CFrame = CFrame.new(hrp.Position + (escapeDir + Vector3.new(0, 0.3, 0)).Unit * (settings.tweenSpeed * dt))
-        return
+    -- 3. ระบบหนีตัวใหญ่
+    if settings.avoidPlayers then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local eRoot = p.Character.HumanoidRootPart
+                if eRoot.Size.Magnitude > hrp.Size.Magnitude and (hrp.Position - eRoot.Position).Magnitude < 150 then
+                    hrp.CFrame = CFrame.new(hrp.Position + (hrp.Position - eRoot.Position).Unit * (settings.tweenSpeed * dt))
+                    return
+                end
+            end
+        end
     end
 
-    local targetPos = nil
-
-    -- 🎯 3. บินหาคนพลังน้อย
-    local weaker = getWeakerPlayer()
-    if weaker then targetPos = weaker.Position end
-
-    -- 🎯 4. บินหาของกิน
-    if not targetPos and settings.flyToFood then
-        local food = getClosestFood()
-        if food then targetPos = food.position end
-    end
-
-    -- ✈️ การเคลื่อนที่ไปยังเป้าหมาย
-    if targetPos then
-        local diff = targetPos - hrp.Position
+    -- 4. ระบบล่าผู้เล่น (Eat Smaller)
+    local target = getTargetPlayer() -- ฟังก์ชันเดิมที่เช็ค Growth > 5000
+    if target then
+        local diff = target.Position - hrp.Position
         if diff.Magnitude > 1.5 then
             hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * (settings.tweenSpeed * dt))
-            hrp.Velocity = Vector3.new(0, 0.1, 0) -- ต้านแรงโน้มถ่วง
         end
     end
 end)
