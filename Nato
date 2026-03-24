@@ -27,17 +27,14 @@ local function getHRP()
         or char.PrimaryPart
 end
 
--- 🔥 FAST MODE: ลบต้นไม้/ภูเขา
+-- FAST MODE: ลบแมพเต็มแมพ
 local function optimizeMap(enable)
     for _,v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") then
+        if v:IsA("BasePart") or v:IsA("MeshPart") then
             local name = string.lower(v.Name)
-
-            if name:find("tree") 
-            or name:find("rock") 
-            or name:find("mountain") 
-            or name:find("bush") then
-                
+            local parentName = v.Parent and string.lower(v.Parent.Name) or ""
+            if name:find("tree") or name:find("rock") or name:find("mountain") or name:find("bush")
+            or parentName:find("tree") or parentName:find("rock") or parentName:find("mountain") or parentName:find("bush") then
                 if enable then
                     v.LocalTransparencyModifier = 1
                     v.CanCollide = false
@@ -72,45 +69,33 @@ local function getMyGrowth()
     local char = player.Character
     local g = char and char:FindFirstChild("Growth")
     if g then return g.Value end
-
     local ls = player:FindFirstChild("leaderstats")
-    if ls and ls:FindFirstChild("Growth") then
-        return ls.Growth.Value
-    end
-
+    if ls and ls:FindFirstChild("Growth") then return ls.Growth.Value end
     return 0
 end
 
--- PLAYER AI
+-- PLAYER AI (ESCAPE > HUNT)
 local function getTargetPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
 
     local myGrowth = getMyGrowth()
-
     local nearestHunt = nil
     local nearestDist = math.huge
+    local escapeTarget = nil
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
-
             local root = plr.Character:FindFirstChild("HumanoidRootPart")
                 or plr.Character:FindFirstChild("RootPart")
                 or plr.Character.PrimaryPart
-
-            local growth =
-                plr.Character:FindFirstChild("Growth")
+            local growth = plr.Character:FindFirstChild("Growth")
                 or (plr:FindFirstChild("leaderstats") and plr.leaderstats:FindFirstChild("Growth"))
-
             if root and growth then
                 local dist = (hrp.Position - root.Position).Magnitude
-
-                -- หนี
                 if dist <= DETECT_DISTANCE and growth.Value > myGrowth then
-                    return "ESCAPE", root.Position
+                    escapeTarget = root
                 end
-
-                -- ล่า
                 if huntMode and growth.Value < myGrowth then
                     if dist < nearestDist then
                         nearestDist = dist
@@ -121,10 +106,8 @@ local function getTargetPlayer()
         end
     end
 
-    if nearestHunt then
-        return "HUNT", nearestHunt
-    end
-
+    if escapeTarget then return "ESCAPE", escapeTarget.Position
+    elseif nearestHunt then return "HUNT", nearestHunt end
     return nil
 end
 
@@ -135,27 +118,15 @@ end
 
 local function moveTo(targetPos)
     stopMover()
-
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
         if not hrp or not running then return end
-
-        if hrp.Position.Y < SAFE_Y then
-            hrp.CFrame = CFrame.new(0,50,0)
-        end
-
+        if hrp.Position.Y < SAFE_Y then hrp.CFrame = CFrame.new(0,50,0) end
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
         if dist < 3 then return end
-
         local speed = tweenSpeed
-
-        if dist < 20 then
-            speed = speed * 0.4
-        elseif dist < 10 then
-            speed = speed * 0.2
-        end
-
+        if dist < 20 then speed = speed * 0.4 elseif dist < 10 then speed = speed * 0.2 end
         local step = math.min(speed * dt, dist)
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
@@ -196,33 +167,24 @@ local statusLbl = Instance.new("TextLabel", panel)
 statusLbl.Size = UDim2.new(1,-20,0,20)
 statusLbl.Position = UDim2.new(0,10,0,45)
 statusLbl.Text = "Status: Idle"
+local function setStatus(msg) statusLbl.Text = "Status: " .. msg end
 
-local function setStatus(msg)
-    statusLbl.Text = "Status: " .. msg
-end
-
--- SPEED
+-- SPEED LABEL + SLIDER
 local speedLbl = Instance.new("TextLabel", panel)
 speedLbl.Size = UDim2.new(1,-20,0,20)
 speedLbl.Position = UDim2.new(0,10,0,70)
 speedLbl.Text = "Speed: 100"
 
--- SLIDER
 local track = Instance.new("Frame", panel)
 track.Size = UDim2.new(1,-20,0,8)
 track.Position = UDim2.new(0,10,0,100)
-
 local fill = Instance.new("Frame", track)
 fill.Size = UDim2.new(tweenSpeed/20000,0,1,0)
-
 local knob = Instance.new("TextButton", track)
 knob.Size = UDim2.new(0,18,0,18)
-
 local dragging = false
-
 knob.MouseButton1Down:Connect(function() dragging = true end)
 UserInputService.InputEnded:Connect(function() dragging = false end)
-
 local function updateSlider(x)
     local ratio = math.clamp((x - track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
     tweenSpeed = math.max(1, math.floor(ratio * 20000))
@@ -230,21 +192,14 @@ local function updateSlider(x)
     knob.Position = UDim2.new(ratio,-9,0.5,-9)
     speedLbl.Text = "Speed: " .. tweenSpeed
 end
-
-UserInputService.InputChanged:Connect(function(input)
-    if dragging then updateSlider(input.Position.X) end
-end)
-
-UserInputService.TouchMoved:Connect(function(input)
-    if dragging then updateSlider(input.Position.X) end
-end)
+UserInputService.InputChanged:Connect(function(input) if dragging then updateSlider(input.Position.X) end end)
+UserInputService.TouchMoved:Connect(function(input) if dragging then updateSlider(input.Position.X) end end)
 
 -- HUNT BUTTON
 local huntBtn = Instance.new("TextButton", panel)
 huntBtn.Size = UDim2.new(0,120,0,40)
 huntBtn.Position = UDim2.new(0.5,-60,1,-150)
 huntBtn.Text = "🦖 HUNT: OFF"
-
 huntBtn.MouseButton1Click:Connect(function()
     huntMode = not huntMode
     huntBtn.Text = huntMode and "🦖 HUNT: ON" or "🦖 HUNT: OFF"
@@ -255,10 +210,8 @@ local fastBtn = Instance.new("TextButton", panel)
 fastBtn.Size = UDim2.new(0,120,0,40)
 fastBtn.Position = UDim2.new(0.5,-60,1,-100)
 fastBtn.Text = "⚡ FAST: OFF"
-
 fastBtn.MouseButton1Click:Connect(function()
     fastMode = not fastMode
-
     if fastMode then
         updateRate = 0.02
         optimizeMap(true)
@@ -266,52 +219,14 @@ fastBtn.MouseButton1Click:Connect(function()
         updateRate = 0.05
         optimizeMap(false)
     end
-
     fastBtn.Text = fastMode and "⚡ FAST: ON" or "⚡ FAST: OFF"
 end)
 
--- LOOP
-local function collectLoop()
-    while running do
-        local state, target = getTargetPlayer()
-
-        if state == "ESCAPE" then
-            setStatus("ESCAPING")
-            local hrp = getHRP()
-            local dir = (hrp.Position - target).Unit
-            moveTo(hrp.Position + dir * 200)
-
-        elseif state == "HUNT" and target then
-            setStatus("HUNTING")
-
-            stopMover()
-            moverConn = RunService.Heartbeat:Connect(function()
-                local hrp = getHRP()
-                if not hrp then return end
-
-                hrp.CFrame = CFrame.new(target.Position + Vector3.new(0,2,0))
-            end)
-
-        else
-            local food = getClosestFood()
-            if food then
-                setStatus("FARMING")
-                moveTo(food.position)
-            else
-                setStatus("IDLE")
-            end
-        end
-
-        task.wait(updateRate)
-    end
-end
-
--- BUTTON
+-- START / STOP
 local startBtn = Instance.new("TextButton", panel)
 startBtn.Size = UDim2.new(0,120,0,40)
 startBtn.Position = UDim2.new(0,15,1,-55)
 startBtn.Text = "START"
-
 local stopBtn = Instance.new("TextButton", panel)
 stopBtn.Size = UDim2.new(0,120,0,40)
 stopBtn.Position = UDim2.new(1,-135,1,-55)
@@ -320,7 +235,34 @@ stopBtn.Text = "STOP"
 startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
-    task.spawn(collectLoop)
+    task.spawn(function()
+        while running do
+            local state, target = getTargetPlayer()
+            if state == "ESCAPE" then
+                setStatus("ESCAPING")
+                local hrp = getHRP()
+                local dir = (hrp.Position - target).Unit
+                moveTo(hrp.Position + dir * 200)
+            elseif state == "HUNT" and target then
+                setStatus("HUNTING")
+                stopMover()
+                moverConn = RunService.Heartbeat:Connect(function()
+                    local hrp = getHRP()
+                    if not hrp then return end
+                    hrp.CFrame = CFrame.new(target.Position + Vector3.new(0,2,0))
+                end)
+            else
+                local food = getClosestFood()
+                if food then
+                    setStatus("FARMING")
+                    moveTo(food.position)
+                else
+                    setStatus("IDLE")
+                end
+            end
+            task.wait(updateRate)
+        end
+    end)
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
@@ -331,8 +273,26 @@ end)
 -- RESPAWN
 player.CharacterAdded:Connect(function()
     task.wait(1)
-    if running then task.spawn(collectLoop) end
+    if running then task.spawn(function() while running do
+        local state, target = getTargetPlayer()
+        if state == "ESCAPE" then
+            local hrp = getHRP()
+            local dir = (hrp.Position - target).Unit
+            moveTo(hrp.Position + dir * 200)
+        elseif state == "HUNT" and target then
+            stopMover()
+            moverConn = RunService.Heartbeat:Connect(function()
+                local hrp = getHRP()
+                if not hrp then return end
+                hrp.CFrame = CFrame.new(target.Position + Vector3.new(0,2,0))
+            end)
+        else
+            local food = getClosestFood()
+            if food then moveTo(food.position) end
+        end
+        task.wait(updateRate)
+    end end) end
 end)
 
--- DEFAULT
+-- DEFAULT STATUS
 setStatus("Idle")
