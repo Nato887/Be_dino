@@ -1,100 +1,148 @@
-local running = false
-local enabled = false
-
 local player = game:GetService("Players").LocalPlayer
-local CollectionService = game:GetService("CollectionService")
+local runService = game:GetService("RunService")
+local players = game:GetService("Players")
 
--- ================= GUI =================
-local gui = Instance.new("ScreenGui")
-gui.Parent = player:WaitForChild("PlayerGui")
-gui.Name = "Be-Dino-Farm"
+-- ================= SETTINGS =================
+local settings = {
+    AutoFeed = false,
+    AvoidPlayers = false,
+    EatSmaller = false,
+    AntiVoid = true
+}
+
+-- ================= GUI DESIGN (Glad Hub Style) =================
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "GladHub_Integrated"
 gui.ResetOnSpawn = false
 
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 200, 0, 120)
-frame.Position = UDim2.new(0, 20, 0, 200)
-frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-frame.BorderSizePixel = 0
-Instance.new("UICorner", frame)
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.new(0, 450, 0, 320)
+main.Position = UDim2.new(0.5, -225, 0.5, -160)
+main.BackgroundColor3 = Color3.fromRGB(15, 12, 28) -- สีมืดโทนม่วง
+main.BorderSizePixel = 0
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
 
-local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1, 0, 0, 30)
-title.Text = "BE DINO FARM 🦖"
-title.BackgroundTransparency = 1
-title.TextColor3 = Color3.fromRGB(0, 255, 0)
+-- Header Title
+local title = Instance.new("TextLabel", main)
+title.Size = UDim2.new(1, -20, 0, 40)
+title.Position = UDim2.new(0, 15, 0, 0)
+title.Text = "Glad Hub | Be Dino v2.3"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextXAlignment = Enum.TextXAlignment.Left
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
+title.BackgroundTransparency = 1
 
-local startBtn = Instance.new("TextButton", frame)
-startBtn.Size = UDim2.new(0.8, 0, 0, 30)
-startBtn.Position = UDim2.new(0.1, 0, 0.4, 0)
-startBtn.Text = "START"
-startBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-startBtn.TextColor3 = Color3.new(1,1,1)
+-- ฟังก์ชันสร้างปุ่มพร้อมคำอธิบาย (ตามที่คุณถาม)
+local function createToggle(name, subText, prop, pos)
+    local btn = Instance.new("TextButton", main)
+    btn.Size = UDim2.new(0, 300, 0, 50)
+    btn.Position = UDim2.new(0, 135, 0, pos)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 25, 50)
+    btn.Text = "" 
+    btn.AutoButtonColor = false
+    Instance.new("UICorner", btn)
 
-local stopBtn = Instance.new("TextButton", frame)
-stopBtn.Size = UDim2.new(0.8, 0, 0, 30)
-stopBtn.Position = UDim2.new(0.1, 0, 0.7, 0)
-stopBtn.Text = "STOP"
-stopBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-stopBtn.TextColor3 = Color3.new(1,1,1)
+    -- ชื่อเมนูหลัก
+    local mainLabel = Instance.new("TextLabel", btn)
+    mainLabel.Size = UDim2.new(1, -60, 0, 25)
+    mainLabel.Position = UDim2.new(0, 12, 0, 5)
+    mainLabel.Text = name
+    mainLabel.TextColor3 = Color3.new(1, 1, 1)
+    mainLabel.Font = Enum.Font.SourceSansBold
+    mainLabel.TextSize = 15
+    mainLabel.BackgroundTransparency = 1
+    mainLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-local image = Instance.new("ImageLabel", frame)
-image.Size = UDim2.new(0, 40, 0, 40)
-image.Position = UDim2.new(1, -45, 0, -5)
-image.BackgroundTransparency = 1
-image.Image = "rbxassetid://12522030"
+    -- คำอธิบายตัวเล็กด้านล่าง (ที่คุณถามถึง)
+    local descLabel = Instance.new("TextLabel", btn)
+    descLabel.Size = UDim2.new(1, -60, 0, 20)
+    descLabel.Position = UDim2.new(0, 12, 0, 25)
+    descLabel.Text = subText
+    descLabel.TextColor3 = Color3.fromRGB(130, 130, 150)
+    descLabel.Font = Enum.Font.SourceSans
+    descLabel.TextSize = 12
+    descLabel.BackgroundTransparency = 1
+    descLabel.TextXAlignment = Enum.TextXAlignment.Left
 
--- ================= FUNCTION =================
-local function getRoot()
-	local char = player.Character or player.CharacterAdded:Wait()
-	return char:WaitForChild("HumanoidRootPart")
+    -- สวิตซ์เปิด-ปิด (Indicator)
+    local status = Instance.new("Frame", btn)
+    status.Size = UDim2.new(0, 35, 0, 18)
+    status.Position = UDim2.new(1, -45, 0.5, -9)
+    status.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(15, 15, 15)
+    Instance.new("UICorner", status).CornerRadius = UDim.new(1, 0)
+
+    btn.MouseButton1Click:Connect(function()
+        settings[prop] = not settings[prop]
+        status.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(15, 15, 15)
+    end)
 end
 
-local function getPos(food)
-	if food:IsA("Model") then
-		return food:GetPivot().Position
-	elseif food:IsA("BasePart") then
-		return food.Position
-	end
-end
+-- สร้างรายการเมนู (เลียนแบบในรูป)
+createToggle("Auto Feed", "Priority: Eggs > Players > Meats", "AutoFeed", 50)
+createToggle("Avoid Players", "Avoid players with distance: 134", "AvoidPlayers", 110)
+createToggle("Eat Smaller Players", "Hunt players with Growth > 5000 when safe", "EatSmaller", 170)
+createToggle("Anti Void", "Prevent you from falling into the void", "AntiVoid", 230)
 
--- ================= LOOP (แก้แล้ว) =================
-task.spawn(function()
-	while true do
-		if enabled and not running then
-			running = true
-			
-			local root = getRoot()
-			local foods = CollectionService:GetTagged("Food")
+-- ================= LOGIC SYSTEM =================
 
-			print("Food:", #foods) -- debug
-			
-			for _, food in ipairs(foods) do
-				if not enabled then break end
-				
-				if food and food.Parent then
-					local pos = getPos(food)
-					if pos then
-						root.CFrame = CFrame.new(pos) -- 🔥 วาร์ปเร็วสุด
-						task.wait(0.01) -- 🔥 กันค้าง
-					end
-				end
-			end
-			
-			running = false
-		end
-		
-		task.wait()
-	end
-end)
+runService.RenderStepped:Connect(function()
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
 
--- ================= BUTTON =================
-startBtn.MouseButton1Click:Connect(function()
-	enabled = true
-	print("START")
-end)
+    -- 1. Anti Void (ถ้าตกแมพให้วาร์ปขึ้นมา)
+    if settings.AntiVoid and root.Position.Y < -50 then
+        root.CFrame = root.CFrame + Vector3.new(0, 200, 0)
+        root.AssemblyLinearVelocity = Vector3.new(0,0,0)
+    end
 
-stopBtn.MouseButton1Click:Connect(function()
-	enabled = false
+    -- 2. Avoid Players (หนีตัวใหญ่)
+    if settings.AvoidPlayers then
+        for _, p in ipairs(players:GetPlayers()) do
+            if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local eRoot = p.Character.HumanoidRootPart
+                -- เงื่อนไข: ถ้ามันตัวใหญ่กว่าเรา และอยู่ใกล้เกิน 134 studs
+                if eRoot.Size.Magnitude > root.Size.Magnitude and (root.Position - eRoot.Position).Magnitude < 134 then
+                    local escapeDir = (root.Position - eRoot.Position).Unit
+                    root.CFrame = root.CFrame + escapeDir * 15 -- วาร์ปหนี
+                    return
+                end
+            end
+        end
+    end
+
+    -- 3. Auto Farm & Hunt
+    if settings.AutoFeed then
+        local target = nil
+        
+        -- ตรวจหา Player ตัวเล็ก (เงื่อนไข Growth > 5000)
+        if settings.EatSmaller then
+            for _, p in ipairs(players:GetPlayers()) do
+                if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local pRoot = p.Character.HumanoidRootPart
+                    -- สมมติว่าค่า Growth ในเกมนี้วัดจาก Size.Magnitude นะครับ
+                    if pRoot.Size.Magnitude < root.Size.Magnitude and pRoot.Size.Magnitude > 10 then 
+                        target = pRoot
+                        break
+                    end
+                end
+            end
+        end
+
+        -- ถ้าไม่มีคนให้ล่า ให้ไปหาเนื้อ (Meat) หรือไข่ (Egg)
+        if not target then
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") and (v.Name:lower():find("meat") or v.Name:lower():find("egg")) then
+                    target = v
+                    break
+                end
+            end
+        end
+
+        -- วาร์ปไปกิน
+        if target then
+            root.CFrame = target.CFrame + Vector3.new(0, 2, 0)
+        end
+    end
 end)
