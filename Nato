@@ -15,6 +15,7 @@ local running   = false
 local tweenSpeed = 100
 local moverConn  = nil
 local fastMode   = false
+local currentTarget = nil
 
 -- ROOT
 local function getHRP()
@@ -52,14 +53,15 @@ local function getMyGrowth()
     return g and g.Value or 0
 end
 
--- PLAYER AI
+-- PLAYER AI (FIXED)
 local function getTargetPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
 
     local myGrowth = getMyGrowth()
-    local huntTarget = nil
-    local huntDist = math.huge
+
+    local nearestHunt = nil
+    local nearestDist = math.huge
 
     for _, plr in Players:GetPlayers() do
         if plr ~= player and plr.Character then
@@ -69,53 +71,61 @@ local function getTargetPlayer()
             if root and growth then
                 local dist = (hrp.Position - root.Position).Magnitude
 
-                -- หนี (ใหญ่กว่า + ใน 100)
+                -- หนีทันที
                 if dist <= DETECT_DISTANCE and growth.Value > myGrowth then
+                    currentTarget = nil
                     return "ESCAPE", root.Position
                 end
 
-                -- ล่า (ตัวเล็กกว่า)
-                if growth.Value < myGrowth and dist < huntDist then
-                    huntDist = dist
-                    huntTarget = root.Position
+                -- หาเป้าล่า
+                if growth.Value < myGrowth and dist < nearestDist then
+                    nearestDist = dist
+                    nearestHunt = root
                 end
             end
         end
     end
 
-    if huntTarget then
-        return "HUNT", huntTarget
+    -- ล็อกเป้า
+    if currentTarget and currentTarget.Parent then
+        return "HUNT", currentTarget.Position
     end
 
+    if nearestHunt then
+        currentTarget = nearestHunt
+        return "HUNT", nearestHunt.Position
+    end
+
+    currentTarget = nil
     return nil
 end
 
--- MOVE
+-- MOVE (REALTIME)
 local function stopMover()
     if moverConn then moverConn:Disconnect(); moverConn = nil end
 end
 
 local function moveTo(targetPos)
-    local reached = false
     stopMover()
+
     moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
-        if not hrp or not running then reached = true; stopMover(); return end
+        if not hrp or not running then return end
 
+        -- anti void
         if hrp.Position.Y < SAFE_Y then
             hrp.CFrame = CFrame.new(0,50,0)
         end
 
         local diff = targetPos - hrp.Position
         local dist = diff.Magnitude
-        if dist < 2 then reached = true; stopMover(); return end
+        if dist < 2 then return end
 
-        local speedMultiplier = fastMode and 3 or 1
+        local speedMultiplier = fastMode and 5 or 1
         local step = math.min(tweenSpeed * speedMultiplier * dt, dist)
 
         hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
     end)
-    while not reached do task.wait(0.05) end
 end
 
 -- ANTI AFK
@@ -149,23 +159,14 @@ toggleBtn.MouseButton1Click:Connect(function()
     panel.Visible = not panel.Visible
 end)
 
--- TITLE
-local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1,0,0,40)
-title.BackgroundTransparency = 1
-title.Text = "🦖 Be-Dino-Farm-NT"
-title.TextColor3 = Color3.fromRGB(0,255,120)
-
 -- STATUS
 local statusLbl = Instance.new("TextLabel", panel)
 statusLbl.Size = UDim2.new(1,-20,0,20)
 statusLbl.Position = UDim2.new(0,10,0,45)
-statusLbl.BackgroundTransparency = 1
 statusLbl.Text = "Status: Idle"
 
-local function setStatus(msg, color)
+local function setStatus(msg)
     statusLbl.Text = "Status: " .. msg
-    statusLbl.TextColor3 = color or Color3.fromRGB(120,255,180)
 end
 
 -- SPEED
@@ -180,7 +181,7 @@ track.Size = UDim2.new(1,-20,0,8)
 track.Position = UDim2.new(0,10,0,100)
 
 local fill = Instance.new("Frame", track)
-fill.Size = UDim2.new(tweenSpeed/10000,0,1,0)
+fill.Size = UDim2.new(tweenSpeed/20000,0,1,0)
 
 local knob = Instance.new("TextButton", track)
 knob.Size = UDim2.new(0,18,0,18)
@@ -192,7 +193,7 @@ UserInputService.InputEnded:Connect(function() dragging = false end)
 
 local function updateSlider(x)
     local ratio = math.clamp((x - track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
-    tweenSpeed = math.max(1, math.floor(ratio * 10000))
+    tweenSpeed = math.max(1, math.floor(ratio * 20000))
     fill.Size = UDim2.new(ratio,0,1,0)
     knob.Position = UDim2.new(ratio,-9,0.5,-9)
     speedLbl.Text = "Speed: " .. tweenSpeed
@@ -206,13 +207,11 @@ UserInputService.TouchMoved:Connect(function(input)
     if dragging then updateSlider(input.Position.X) end
 end)
 
--- FAST MODE BUTTON
+-- FAST MODE
 local fastBtn = Instance.new("TextButton", panel)
 fastBtn.Size = UDim2.new(0,120,0,40)
 fastBtn.Position = UDim2.new(0.5,-60,1,-100)
-fastBtn.BackgroundColor3 = Color3.fromRGB(0,255,120)
 fastBtn.Text = "⚡ FAST: OFF"
-fastBtn.TextColor3 = Color3.fromRGB(0,0,0)
 
 fastBtn.MouseButton1Click:Connect(function()
     fastMode = not fastMode
@@ -225,28 +224,27 @@ local function collectLoop()
         local state, pos = getTargetPlayer()
 
         if state == "ESCAPE" then
-            setStatus("Escaping")
+            setStatus("ESCAPING")
             local hrp = getHRP()
             local dir = (hrp.Position - pos).Unit
-            moveTo(hrp.Position + dir * 100)
+            moveTo(hrp.Position + dir * 200)
 
         elseif state == "HUNT" then
-            setStatus("Hunting")
+            setStatus("HUNTING")
             moveTo(pos)
 
         else
             local food = getClosestFood()
             if food then
-                setStatus("Collecting Food")
+                setStatus("FARMING")
                 moveTo(food.position)
             else
-                setStatus("Idle")
+                setStatus("IDLE")
             end
         end
 
-        task.wait(fastMode and 0.03 or 0.1)
+        task.wait(fastMode and 0.01 or 0.05)
     end
-    setStatus("Stopped")
 end
 
 -- BUTTON
@@ -263,14 +261,12 @@ stopBtn.Text = "STOP"
 startBtn.MouseButton1Click:Connect(function()
     if running then return end
     running = true
-    setStatus("Running")
     task.spawn(collectLoop)
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
     running = false
     stopMover()
-    setStatus("Stopped")
 end)
 
 -- RESPAWN
