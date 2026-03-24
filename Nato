@@ -2,14 +2,13 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 
--- ================= SETTINGS =================
+-- SETTINGS
 local settings = {
     autoFood = false,
     huntWeaker = false,
@@ -17,100 +16,120 @@ local settings = {
     antiVoid = true,
     antiAFK = false,
     autoBoss = false,
-    fastMode = false,
     tweenSpeed = 150,
 }
 
--- ── Get Root Part ──
-local function getHRP()
-    local char = player.Character
-    if not char then return nil end
-    for _, v in ipairs(char:GetChildren()) do
-        if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
-            return v
-        end
-    end
-    return char.PrimaryPart
-end
-
--- ── Get Growth ──
-local function getGrowth(char)
-    if not char then return 0 end
-    local root = char:FindFirstChild("RootPart") or char:FindFirstChild("HumanoidRootPart")
-    return root and (root.Size.X * root.Size.Y * root.Size.Z) or 0
-end
-
--- ================= GUI =================
+-- GUI (สว่างขึ้น)
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "NatoHub_V20_Final"; gui.ResetOnSpawn = false
+gui.Name = "NatoHub_Bright"
 
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 520, 0, 340)
 main.Position = UDim2.new(0.5, -260, 0.5, -170)
-main.BackgroundColor3 = Color3.fromRGB(12, 8, 20)
-main.Active = true; main.Draggable = true
+main.BackgroundColor3 = Color3.fromRGB(40, 40, 60) -- สว่างขึ้น
+main.Active = true
+main.Draggable = true
 Instance.new("UICorner", main)
 
 local sidebar = Instance.new("Frame", main)
-sidebar.Size = UDim2.new(0, 135, 1, 0)
-sidebar.BackgroundColor3 = Color3.fromRGB(18, 14, 28)
+sidebar.Size = UDim2.new(0, 140, 1, 0)
+sidebar.BackgroundColor3 = Color3.fromRGB(60, 60, 90)
 
 local container = Instance.new("Frame", main)
-container.Size = UDim2.new(1, -145, 1, -20)
-container.Position = UDim2.new(0, 140, 0, 10)
+container.Size = UDim2.new(1, -150, 1, -20)
+container.Position = UDim2.new(0, 145, 0, 10)
 container.BackgroundTransparency = 1
 
 local tabs = {
-    Tab1 = Instance.new("ScrollingFrame", container),
-    Tab2 = Instance.new("ScrollingFrame", container)
+    Tab1 = Instance.new("Frame", container),
+    Tab2 = Instance.new("Frame", container)
 }
 
 for name, frame in pairs(tabs) do
-    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.Size = UDim2.new(1,0,1,0)
     frame.Visible = (name == "Tab1")
     frame.BackgroundTransparency = 1
-    frame.ScrollBarThickness = 0
-    Instance.new("UIListLayout", frame).Padding = UDim.new(0, 10)
+    local layout = Instance.new("UIListLayout", frame)
+    layout.Padding = UDim.new(0,10)
 end
 
-local function showTab(tName)
-    for n, f in pairs(tabs) do
-        f.Visible = (n == tName)
+local function showTab(t)
+    for n,f in pairs(tabs) do
+        f.Visible = (n==t)
     end
 end
 
-local function createTabBtn(n, y, t)
+local function createTabBtn(name, y, tab)
     local b = Instance.new("TextButton", sidebar)
-    b.Size = UDim2.new(0.9, 0, 0, 40)
-    b.Position = UDim2.new(0, 6, 0, y)
-    b.Text = n
+    b.Size = UDim2.new(1,-10,0,40)
+    b.Position = UDim2.new(0,5,0,y)
+    b.Text = name
+    b.TextColor3 = Color3.new(1,1,1)
+    b.BackgroundColor3 = Color3.fromRGB(80,80,120)
+    Instance.new("UICorner", b)
+
     b.MouseButton1Click:Connect(function()
-        showTab(t)
+        showTab(tab)
     end)
 end
 
 createTabBtn("Automation", 60, "Tab1")
 createTabBtn("Boss/Misc", 110, "Tab2")
 
--- ================= TOGGLES =================
-local function createToggle(p, n, pr)
-    local b = Instance.new("TextButton", p)
-    b.Size = UDim2.new(0.95, 0, 0, 45)
-    b.Text = n
-    b.BackgroundColor3 = Color3.fromRGB(30, 25, 50)
+-- Toggle
+local function createToggle(parent, text, key)
+    local b = Instance.new("TextButton", parent)
+    b.Size = UDim2.new(1,0,0,45)
+    b.Text = text
+    b.TextColor3 = Color3.new(1,1,1)
+    b.BackgroundColor3 = Color3.fromRGB(90,90,140)
+    Instance.new("UICorner", b)
 
     b.MouseButton1Click:Connect(function()
-        settings[pr] = not settings[pr]
-        b.BackgroundColor3 = settings[pr] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(30, 25, 50)
+        settings[key] = not settings[key]
+        b.BackgroundColor3 = settings[key] and Color3.fromRGB(140,100,255) or Color3.fromRGB(90,90,140)
     end)
 end
 
-createToggle(tabs.Tab1, "Auto Food", "autoFood")
-createToggle(tabs.Tab1, "Hunt Smaller", "huntWeaker")
-createToggle(tabs.Tab1, "Avoid Players", "avoidPlayers")
-createToggle(tabs.Tab1, "Anti Void", "antiVoid")
+-- TAB1
+createToggle(tabs.Tab1,"Auto Food","autoFood")
+createToggle(tabs.Tab1,"Hunt Smaller","huntWeaker")
+createToggle(tabs.Tab1,"Avoid Players","avoidPlayers")
+createToggle(tabs.Tab1,"Anti Void","antiVoid")
 
--- ================= ANTI AFK =================
+-- TAB2 (แก้ให้มีของแล้ว)
+createToggle(tabs.Tab2,"Kill Boss (Auto)","autoBoss")
+
+-- Anti AFK
+local afkBtn = Instance.new("TextButton", tabs.Tab2)
+afkBtn.Size = UDim2.new(1,0,0,45)
+afkBtn.Text = "Anti AFK: OFF"
+afkBtn.BackgroundColor3 = Color3.fromRGB(90,90,140)
+Instance.new("UICorner", afkBtn)
+
+afkBtn.MouseButton1Click:Connect(function()
+    settings.antiAFK = not settings.antiAFK
+    afkBtn.Text = "Anti AFK: "..(settings.antiAFK and "ON" or "OFF")
+end)
+
+-- Server Hop
+local hopBtn = Instance.new("TextButton", tabs.Tab2)
+hopBtn.Size = UDim2.new(1,0,0,45)
+hopBtn.Text = "Server Hop"
+hopBtn.BackgroundColor3 = Color3.fromRGB(90,90,140)
+Instance.new("UICorner", hopBtn)
+
+hopBtn.MouseButton1Click:Connect(function()
+    local s = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?limit=50"))
+    for _,v in pairs(s.data) do
+        if v.playing < v.maxPlayers then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId,v.id,player)
+            break
+        end
+    end
+end)
+
+-- Anti AFK Logic
 player.Idled:Connect(function()
     if settings.antiAFK then
         VirtualUser:CaptureController()
@@ -118,54 +137,41 @@ player.Idled:Connect(function()
     end
 end)
 
--- ================= CORE =================
-RunService.Heartbeat:Connect(function(dt)
-    local hrp = getHRP()
-    if not hrp then return end
-
-    -- Anti Void
-    if settings.antiVoid and hrp.Position.Y < -50 then
-        hrp.CFrame = CFrame.new(0,150,0)
-    end
-end)
-
--- ================= AUTO BOSS =================
+-- AUTO BOSS
 RunService.RenderStepped:Connect(function()
     if not settings.autoBoss then return end
 
-    local playerGui = player:FindFirstChild("PlayerGui")
-    if not playerGui then return end
+    local pg = player:FindFirstChild("PlayerGui")
+    if not pg then return end
 
-    -- 🔴 เปลี่ยนชื่อตรงนี้ถ้าไม่ทำงาน
-    local bossGui = playerGui:FindFirstChild("BossBar") or playerGui:FindFirstChild("Minigame")
-    if not bossGui then return end
+    local gui = pg:FindFirstChild("BossBar") or pg:FindFirstChild("Minigame")
+    if not gui then return end
 
-    local bar = bossGui:FindFirstChildWhichIsA("Frame")
+    local bar = gui:FindFirstChildWhichIsA("Frame")
     if not bar then return end
 
-    local greenZone = bar:FindFirstChild("Green") or bar:FindFirstChild("Target")
-    local whiteBar = bar:FindFirstChild("Slider") or bar:FindFirstChild("Cursor")
+    local green = bar:FindFirstChild("Green") or bar:FindFirstChild("Target")
+    local white = bar:FindFirstChild("Slider") or bar:FindFirstChild("Cursor")
 
-    if greenZone and whiteBar then
-        local gStart = greenZone.AbsolutePosition.X
-        local gEnd = gStart + greenZone.AbsoluteSize.X
+    if green and white then
+        local g1 = green.AbsolutePosition.X
+        local g2 = g1 + green.AbsoluteSize.X
+        local w = white.AbsolutePosition.X + white.AbsoluteSize.X/2
 
-        local wMid = whiteBar.AbsolutePosition.X + whiteBar.AbsoluteSize.X / 2
-
-        if wMid > gStart and wMid < gEnd then
-            VirtualUser:CaptureController()
+        if w > g1 and w < g2 then
             VirtualUser:Button1Down(Vector2.new())
             VirtualUser:Button1Up(Vector2.new())
         end
     end
 end)
 
--- ================= BUTTON =================
-local nBtn = Instance.new("TextButton", gui)
-nBtn.Size = UDim2.new(0, 50, 0, 50)
-nBtn.Position = UDim2.new(0, 10, 0, 10)
-nBtn.Text = "NATO"
+-- เปิด/ปิด GUI
+local btn = Instance.new("TextButton", gui)
+btn.Size = UDim2.new(0,50,0,50)
+btn.Position = UDim2.new(0,10,0,10)
+btn.Text = "NATO"
+btn.BackgroundColor3 = Color3.fromRGB(140,100,255)
 
-nBtn.MouseButton1Click:Connect(function()
+btn.MouseButton1Click:Connect(function()
     main.Visible = not main.Visible
 end)
