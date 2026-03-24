@@ -1,26 +1,27 @@
 local running = false
-local enabled = false -- 👈 ใช้เปิด/ปิดระบบ
+local enabled = false
 
 local player = game:GetService("Players").LocalPlayer
-local runService = game:GetService("RunService")
+local tweenService = game:GetService("TweenService")
 
 -- ================= GUI =================
-local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+local gui = Instance.new("ScreenGui")
+gui.Parent = player:WaitForChild("PlayerGui")
 gui.Name = "MeatFarmGUI"
+gui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.new(0, 200, 0, 120)
 frame.Position = UDim2.new(0, 20, 0, 200)
-frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- ดำ
+frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 frame.BorderSizePixel = 0
-
-local uiCorner = Instance.new("UICorner", frame)
+Instance.new("UICorner", frame)
 
 local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1, 0, 0, 30)
 title.Text = "MEAT FARM 🦖"
 title.BackgroundTransparency = 1
-title.TextColor3 = Color3.fromRGB(0, 255, 0) -- เขียว
+title.TextColor3 = Color3.fromRGB(0, 255, 0)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
 
@@ -29,23 +30,19 @@ startBtn.Size = UDim2.new(0.8, 0, 0, 30)
 startBtn.Position = UDim2.new(0.1, 0, 0.4, 0)
 startBtn.Text = "START"
 startBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-startBtn.TextColor3 = Color3.new(1,1,1)
 
 local stopBtn = Instance.new("TextButton", frame)
 stopBtn.Size = UDim2.new(0.8, 0, 0, 30)
 stopBtn.Position = UDim2.new(0.1, 0, 0.7, 0)
 stopBtn.Text = "STOP"
 stopBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-stopBtn.TextColor3 = Color3.new(1,1,1)
 
--- 🦖 รูปไดโน
 local image = Instance.new("ImageLabel", frame)
 image.Size = UDim2.new(0, 40, 0, 40)
 image.Position = UDim2.new(1, -45, 0, -5)
 image.BackgroundTransparency = 1
-image.Image = "rbxassetid://12522030" -- ไดโน (เปลี่ยนไอดีได้)
+image.Image = "rbxassetid://12522030"
 
--- ปุ่มทำงาน
 startBtn.MouseButton1Click:Connect(function()
 	enabled = true
 end)
@@ -54,30 +51,57 @@ stopBtn.MouseButton1Click:Connect(function()
 	enabled = false
 end)
 
--- ================= CODE เดิม =================
-runService.RenderStepped:Connect(function()
-	if enabled then -- 👈 เพิ่มแค่เช็คนี้
-		if running == false then
+-- ================= ฟังก์ชัน =================
+
+local function tweenTo(root, cf)
+	local tween = tweenService:Create(
+		root,
+		TweenInfo.new(0.015, Enum.EasingStyle.Linear), -- 🔥 ลื่นกว่า 0.01
+		{CFrame = cf}
+	)
+	tween:Play()
+	tween.Completed:Wait()
+end
+
+local function getMeats()
+	local meats = {}
+	for _, v in ipairs(workspace:GetChildren()) do
+		if v.Name:lower():find("meat") then
+			local target = v:FindFirstChild(v.Name:lower():gsub("_", ""))
+			if target then
+				table.insert(meats, target)
+			end
+		end
+	end
+	return meats
+end
+
+local function sortByDistance(root, list)
+	table.sort(list, function(a, b)
+		return (root.Position - a.Position).Magnitude < (root.Position - b.Position).Magnitude
+	end)
+end
+
+-- ================= MAIN LOOP =================
+task.spawn(function()
+	while true do
+		if enabled and not running then
 			running = true
 			
-			local char = player.Character
-			local root = char and char:FindFirstChild("RootPart")
-			
-			if root then
-				for _, v in ipairs(workspace:GetChildren()) do
-					pcall(function()
-						if v.Name:lower():find("meat") then
-							local target = v:FindFirstChild(v.Name:lower():gsub("_", ""))
-							if target then
-								root.CFrame = target.CFrame
-								task.wait(0.1)
-							end
-						end
-					end)
-				end
+			local char = player.Character or player.CharacterAdded:Wait()
+			local root = char:WaitForChild("HumanoidRootPart")
+
+			local meats = getMeats()
+			sortByDistance(root, meats)
+
+			for _, target in ipairs(meats) do
+				if not enabled then break end
+				tweenTo(root, target.CFrame)
 			end
 			
 			running = false
 		end
+		
+		task.wait(0.1) -- 🔥 ไม่ยิงถี่เกิน
 	end
 end)
