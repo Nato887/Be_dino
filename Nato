@@ -2,7 +2,6 @@ local running = false
 local enabled = false
 
 local player = game:GetService("Players").LocalPlayer
-local tweenService = game:GetService("TweenService")
 local CollectionService = game:GetService("CollectionService")
 
 -- ================= GUI =================
@@ -15,6 +14,7 @@ local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.new(0, 200, 0, 120)
 frame.Position = UDim2.new(0, 20, 0, 200)
 frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+frame.BorderSizePixel = 0
 Instance.new("UICorner", frame)
 
 local title = Instance.new("TextLabel", frame)
@@ -23,20 +23,29 @@ title.Text = "BE DINO FARM 🦖"
 title.BackgroundTransparency = 1
 title.TextColor3 = Color3.fromRGB(0, 255, 0)
 title.Font = Enum.Font.SourceSansBold
+title.TextSize = 18
 
 local startBtn = Instance.new("TextButton", frame)
 startBtn.Size = UDim2.new(0.8, 0, 0, 30)
 startBtn.Position = UDim2.new(0.1, 0, 0.4, 0)
 startBtn.Text = "START"
 startBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+startBtn.TextColor3 = Color3.new(1,1,1)
 
 local stopBtn = Instance.new("TextButton", frame)
 stopBtn.Size = UDim2.new(0.8, 0, 0, 30)
 stopBtn.Position = UDim2.new(0.1, 0, 0.7, 0)
 stopBtn.Text = "STOP"
 stopBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+stopBtn.TextColor3 = Color3.new(1,1,1)
 
--- ================= ฟังก์ชัน =================
+local image = Instance.new("ImageLabel", frame)
+image.Size = UDim2.new(0, 40, 0, 40)
+image.Position = UDim2.new(1, -45, 0, -5)
+image.BackgroundTransparency = 1
+image.Image = "rbxassetid://12522030"
+
+-- ================= FUNCTION =================
 local function getRoot()
 	local char = player.Character or player.CharacterAdded:Wait()
 	return char:WaitForChild("HumanoidRootPart")
@@ -50,38 +59,29 @@ local function getPos(food)
 	end
 end
 
-local function tweenTo(root, pos)
-	local tween = tweenService:Create(
-		root,
-		TweenInfo.new(0.01, Enum.EasingStyle.Linear),
-		{CFrame = CFrame.new(pos)}
-	)
-	tween:Play()
-end
-
--- ================= LOOP =================
+-- ================= LOOP (แก้แล้ว) =================
 task.spawn(function()
 	while true do
 		if enabled and not running then
 			running = true
-
+			
 			local root = getRoot()
 			local foods = CollectionService:GetTagged("Food")
 
-			print("Food count:", #foods) -- 🔥 debug
-
+			print("Food:", #foods) -- debug
+			
 			for _, food in ipairs(foods) do
 				if not enabled then break end
-
+				
 				if food and food.Parent then
 					local pos = getPos(food)
 					if pos then
-						tweenTo(root, pos)
-						task.wait(0.01) -- 🔥 กันค้าง + ให้ tween ทำงาน
+						root.CFrame = CFrame.new(pos) -- 🔥 วาร์ปเร็วสุด
+						task.wait(0.01) -- 🔥 กันค้าง
 					end
 				end
 			end
-
+			
 			running = false
 		end
 		
@@ -92,7 +92,7 @@ end)
 -- ================= BUTTON =================
 startBtn.MouseButton1Click:Connect(function()
 	enabled = true
-	print("START") -- debug
+	print("START")
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
