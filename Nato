@@ -1,229 +1,222 @@
--- ================= SERVICES =================
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local VirtualUser = game:GetService("VirtualUser")
+local UserInputService  = game:GetService("UserInputService")
+local VirtualUser       = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 
--- ================= SETTINGS =================
-local settings = {
-	autoFood = false,
-	huntWeaker = false,
-	avoidPlayers = false,
-	antiVoid = true,
-	antiAFK = false,
-	autoBoss = false, -- เพิ่มตัวแปรบอส
-	fastMode = false,
-	tweenSpeed = 150,
-}
+-- ===== CONFIG =====
+local SAFE_Y = -50
+local DETECT_DISTANCE = 100
 
--- ================= UTILS =================
+local running   = false
+local tweenSpeed = 100
+local moverConn  = nil
+
+-- ===== CHARACTER =====
+local function getChar()
+    return player.Character or player.CharacterAdded:Wait()
+end
+
 local function getHRP()
-	local char = player.Character
-	if not char then return nil end
-	for _, v in ipairs(char:GetChildren()) do
-		if v.Name == "RootPart" and v:IsA("BasePart") and not v.Massless then
-			return v
-		end
-	end
-	return char.PrimaryPart
+    local char = getChar()
+    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 end
 
-local function getGrowth(char)
-	if not char then return 0 end
-	local root = char:FindFirstChild("RootPart") or char:FindFirstChild("HumanoidRootPart")
-	return root and (root.Size.X * root.Size.Y * root.Size.Z) or 0
+-- ===== FOOD =====
+local function getClosestFood()
+    local hrp = getHRP()
+    if not hrp then return nil end
+
+    local best, bestDist = nil, math.huge
+    for _, food in CollectionService:GetTagged("Food") do
+        if food and food.Parent then
+            local pos = food:IsA("Model") and food:GetPivot().Position or food.Position
+            local d = (hrp.Position - pos).Magnitude
+            if d < bestDist then
+                bestDist = d
+                best = {instance = food, position = pos}
+            end
+        end
+    end
+    return best
 end
 
--- ================= GUI SYSTEM =================
-local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "NatoHub_V20_Final"
+-- ===== GROWTH =====
+local function getMyGrowth()
+    local char = getChar()
+    local g = char:FindFirstChild("Growth")
+    return g and g.Value or 0
+end
+
+-- ===== PLAYER AI (100 STUDS ONLY) =====
+local function getTargetPlayer()
+    local hrp = getHRP()
+    if not hrp then return nil end
+
+    local myGrowth = getMyGrowth()
+    local closest = nil
+    local closestDist = DETECT_DISTANCE
+
+    for _, plr in Players:GetPlayers() do
+        if plr ~= player and plr.Character then
+            local root = plr.Character:FindFirstChild("HumanoidRootPart")
+            local growth = plr.Character:FindFirstChild("Growth")
+
+            if root and growth then
+                local dist = (hrp.Position - root.Position).Magnitude
+
+                if dist <= DETECT_DISTANCE and dist < closestDist then
+                    closestDist = dist
+                    closest = {
+                        pos = root.Position,
+                        growth = growth.Value
+                    }
+                end
+            end
+        end
+    end
+
+    if not closest then return nil end
+
+    if closest.growth > myGrowth then
+        return "ESCAPE", closest.pos
+    else
+        return "HUNT", closest.pos
+    end
+end
+
+-- ===== MOVE =====
+local function stopMover()
+    if moverConn then moverConn:Disconnect() moverConn = nil end
+end
+
+local function moveTo(pos)
+    stopMover()
+
+    moverConn = RunService.Heartbeat:Connect(function(dt)
+        local hrp = getHRP()
+        if not hrp or not running then return end
+
+        -- anti void
+        if hrp.Position.Y < SAFE_Y then
+            hrp.CFrame = CFrame.new(0,50,0)
+        end
+
+        local diff = pos - hrp.Position
+        local dist = diff.Magnitude
+
+        if dist < 2 then stopMover() return end
+
+        hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * math.min(tweenSpeed*dt, dist))
+    end)
+end
+
+-- ===== ANTI AFK =====
+task.spawn(function()
+    while true do
+        task.wait(60)
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end
+end)
+
+-- ===== GUI =====
+local gui = Instance.new("ScreenGui")
+gui.Name = "FoodCollector"
 gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
 
-local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 520, 0, 340)
-main.Position = UDim2.new(0.5, -260, 0.5, -170)
-main.BackgroundColor3 = Color3.fromRGB(12, 8, 20)
-main.Active = true
-main.Draggable = true
-Instance.new("UICorner", main)
+-- toggle
+local toggle = Instance.new("TextButton", gui)
+toggle.Size = UDim2.new(0,100,0,30)
+toggle.Position = UDim2.new(0,10,0,10)
+toggle.Text = "OPEN"
 
-local sidebar = Instance.new("Frame", main)
-sidebar.Size = UDim2.new(0, 135, 1, 0)
-sidebar.BackgroundColor3 = Color3.fromRGB(18, 14, 28)
+local panel = Instance.new("Frame", gui)
+panel.Size = UDim2.new(0,270,0,200)
+panel.Position = UDim2.new(0.5,-135,0.5,-100)
+panel.Visible = false
 
-local container = Instance.new("Frame", main)
-container.Size = UDim2.new(1, -145, 1, -20)
-container.Position = UDim2.new(0, 140, 0, 10)
-container.BackgroundTransparency = 1
-
-local tabs = {
-	Tab1 = Instance.new("ScrollingFrame", container),
-	Tab2 = Instance.new("ScrollingFrame", container)
-}
-
-for name, frame in pairs(tabs) do
-	frame.Size = UDim2.new(1, 0, 1, 0)
-	frame.Visible = (name == "Tab1")
-	frame.BackgroundTransparency = 1
-	frame.ScrollBarThickness = 0
-	local layout = Instance.new("UIListLayout", frame)
-	layout.Padding = UDim.new(0, 10)
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-end
-
-local function createToggle(parent, name, key)
-	local b = Instance.new("TextButton", parent)
-	b.Size = UDim2.new(0.95, 0, 0, 45)
-	b.BackgroundColor3 = Color3.fromRGB(30, 25, 50)
-	b.Text = "   "..name
-	b.TextColor3 = Color3.new(1,1,1)
-	b.BorderSizePixel = 0
-	Instance.new("UICorner", b)
-
-	b.MouseButton1Click:Connect(function()
-		settings[key] = not settings[key]
-		b.BackgroundColor3 = settings[key] and Color3.fromRGB(130,60,255) or Color3.fromRGB(30,25,50)
-	end)
-end
-
-local function createBtn(parent, name, func)
-	local b = Instance.new("TextButton", parent)
-	b.Size = UDim2.new(0.95, 0, 0, 40)
-	b.Text = name
-	b.BackgroundColor3 = Color3.fromRGB(35,30,55)
-	b.TextColor3 = Color3.new(1,1,1)
-	b.BorderSizePixel = 0
-	Instance.new("UICorner", b)
-	b.MouseButton1Click:Connect(func)
-end
-
--- Setup Tabs
-createToggle(tabs.Tab1, "Auto Food", "autoFood")
-createToggle(tabs.Tab1, "Hunt Smaller", "huntWeaker")
-createToggle(tabs.Tab1, "Avoid Bigger", "avoidPlayers")
-createToggle(tabs.Tab1, "Auto Boss System", "autoBoss") -- เพิ่มปุ่มบอส
-
-createBtn(tabs.Tab2, "Anti AFK", function() settings.antiAFK = not settings.antiAFK end)
-createBtn(tabs.Tab2, "Fast Mode", function() 
-    settings.fastMode = not settings.fastMode 
-    RunService:Set3dRenderingEnabled(not settings.fastMode)
+toggle.MouseButton1Click:Connect(function()
+    panel.Visible = not panel.Visible
 end)
 
--- ================= BOSS MINIGAME UI & LOGIC =================
-local bossBarFrame = Instance.new("Frame", gui)
-bossBarFrame.Size = UDim2.new(0, 300, 0, 40)
-bossBarFrame.Position = UDim2.new(0.5, -150, 0.75, 0)
-bossBarFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-bossBarFrame.Visible = false
-Instance.new("UICorner", bossBarFrame)
+-- ===== MOBILE SLIDER =====
+local dragging = false
 
-local greenZone = Instance.new("Frame", bossBarFrame)
-greenZone.Size = UDim2.new(0.2, 0, 1, 0)
-greenZone.BackgroundColor3 = Color3.fromRGB(0, 255, 120)
-Instance.new("UICorner", greenZone)
-
-local whiteIndicator = Instance.new("Frame", bossBarFrame)
-whiteIndicator.Size = UDim2.new(0, 8, 1, 6)
-whiteIndicator.Position = UDim2.new(0, 0, 0, -3)
-whiteIndicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-
-local sliderPos = 0
-local direction = 1
-local targetPos = 0.5
-
-local function randomizeBoss()
-	targetPos = math.random(10, 70) / 100
-	greenZone.Position = UDim2.new(targetPos, 0, 0, 0)
+local function updateSlider(x)
+    local ratio = math.clamp((x - panel.AbsolutePosition.X)/200,0,1)
+    tweenSpeed = math.max(1, math.floor(ratio * 1000))
 end
 
--- ================= MAIN LOOP =================
-RunService.Heartbeat:Connect(function(dt)
-	local hrp = getHRP()
-	if not hrp then return end
-	local myG = getGrowth(player.Character)
-
-	-- Boss System Logic
-	if settings.autoBoss then
-		bossBarFrame.Visible = true
-		sliderPos = sliderPos + (dt * 1.5 * direction) -- ความเร็ว 1.5
-		if sliderPos >= 1 or sliderPos <= 0 then direction *= -1 end
-		whiteIndicator.Position = UDim2.new(sliderPos, 0, 0, -3)
-
-		-- Auto Hit Check
-		local diff = math.abs(sliderPos - (targetPos + 0.1))
-		if diff < 0.05 then
-			VirtualUser:CaptureController()
-			VirtualUser:Button1Down(Vector2.new(0,0))
-			task.wait(0.05)
-			VirtualUser:Button1Up(Vector2.new(0,0))
-			randomizeBoss()
-		end
-	else
-		bossBarFrame.Visible = false
-	end
-
-	-- Anti Void
-	if settings.antiVoid and hrp.Position.Y < -50 then
-		hrp.CFrame = CFrame.new(0,150,0)
-		return
-	end
-
-	-- Avoid/Hunt/Food Logic (เหมือนเดิม)
-	local target = nil
-	if settings.avoidPlayers then
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= player and p.Character then
-				local e = p.Character:FindFirstChild("HumanoidRootPart")
-				if e and (hrp.Position - e.Position).Magnitude < 150 then
-					if getGrowth(p.Character) > myG then
-						hrp.CFrame = hrp.CFrame + (hrp.Position - e.Position).Unit * settings.tweenSpeed * dt
-						return
-					end
-				end
-			end
-		end
-	end
-
-	if settings.huntWeaker then
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= player and p.Character then
-				local e = p.Character:FindFirstChild("HumanoidRootPart")
-				if e and getGrowth(p.Character) < myG then target = e.Position end
-			end
-		end
-	end
-
-	if not target and settings.autoFood then
-		for _, food in ipairs(CollectionService:GetTagged("Food")) do target = food.Position end
-	end
-
-	if target then
-		hrp.CFrame = hrp.CFrame + (target - hrp.Position).Unit * settings.tweenSpeed * dt
-	end
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+    end
 end)
 
--- Anti AFK
-player.Idled:Connect(function()
-	if settings.antiAFK then
-		VirtualUser:CaptureController()
-		VirtualUser:ClickButton2(Vector2.new())
-	end
+UserInputService.InputEnded:Connect(function()
+    dragging = false
 end)
 
--- Toggle Button NATO
-local nBtn = Instance.new("TextButton", gui)
-nBtn.Size = UDim2.new(0,50,0,50)
-nBtn.Position = UDim2.new(0,15,0,15)
-nBtn.Text = "NATO"
-nBtn.BackgroundColor3 = Color3.fromRGB(130,60,255)
-nBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", nBtn)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.Touch then
+        updateSlider(input.Position.X)
+    end
+end)
 
-nBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
-randomizeBoss()
+-- ===== LOOP =====
+local function loop()
+    while running do
+        local state, pos = getTargetPlayer()
+
+        if state == "ESCAPE" then
+            local hrp = getHRP()
+            local dir = (hrp.Position - pos).Unit
+            moveTo(hrp.Position + dir * 100)
+
+        elseif state == "HUNT" then
+            moveTo(pos)
+
+        else
+            local food = getClosestFood()
+            if food then
+                moveTo(food.position)
+            end
+        end
+
+        task.wait(0.2)
+    end
+end
+
+-- ===== BUTTON =====
+local start = Instance.new("TextButton", panel)
+start.Size = UDim2.new(0,100,0,40)
+start.Position = UDim2.new(0,10,1,-50)
+start.Text = "START"
+
+local stop = Instance.new("TextButton", panel)
+stop.Size = UDim2.new(0,100,0,40)
+stop.Position = UDim2.new(1,-110,1,-50)
+stop.Text = "STOP"
+
+start.MouseButton1Click:Connect(function()
+    if running then return end
+    running = true
+    task.spawn(loop)
+end)
+
+stop.MouseButton1Click:Connect(function()
+    running = false
+    stopMover()
+end)
+
+-- ===== RESPAWN FIX =====
+player.CharacterAdded:Connect(function()
+    task.wait(1)
+    if running then
+        task.spawn(loop)
+    end
+end)
