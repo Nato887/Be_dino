@@ -1,43 +1,60 @@
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
-local UserInputService = game:GetService("UserInputService")
+local UserInputService  = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
 
 -- ================= SETTINGS =================
 local settings = {
-    running = false,
+    flyToFood = false,
     avoidEnabled = false,
-    flyFarm = false, -- ระบบบินฟาร์มอัตโนมัติ
+    huntWeaker = false,
+    antiVoid = true, -- ✅ ระบบกันตกแมพ (เปิดไว้เป็นค่าเริ่มต้น)
     tweenSpeed = 100,
 }
 
--- ── Get the REAL root ──
+-- ── Get Root Part ──
 local function getHRP()
     local char = player.Character
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+    return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 end
 
--- ── 1. ระบบหาของกิน (Food Tag) ──
+-- ── 1. ระบบหาคนพลังน้อยกว่า ──
+local function getWeakerPlayer()
+    local hrp = getHRP()
+    if not hrp or not settings.huntWeaker then return nil end
+    local target, bestDist = nil, math.huge
+    local mySize = hrp.Size.Magnitude 
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local enemyRoot = p.Character.HumanoidRootPart
+            if enemyRoot.Size.Magnitude < mySize then
+                local d = (hrp.Position - enemyRoot.Position).Magnitude
+                if d < bestDist then bestDist = d; target = enemyRoot end
+            end
+        end
+    end
+    return target
+end
+
+-- ── 2. ระบบหาของกิน (Food Tag) ──
 local function getClosestFood()
     local hrp = getHRP()
-    if not hrp then return nil end
+    if not hrp or not settings.flyToFood then return nil end
     local best, bestDist = nil, math.huge
     for _, food in ipairs(CollectionService:GetTagged("Food")) do
         if not food or not food.Parent then continue end
         local pos = (food:IsA("Model") and food:GetPivot().Position) or (food:IsA("BasePart") and food.Position)
         if pos then
             local d = (hrp.Position - pos).Magnitude
-            if d < bestDist then bestDist = d; best = { instance = food, position = pos } end
+            if d < bestDist then bestDist = d; best = { position = pos } end
         end
     end
     return best
 end
 
--- ── 2. ระบบ Avoid Player (หนี 150 Studs) ──
+-- ── 3. ระบบ Avoid Player (หนีตัวใหญ่ 150 Studs) ──
 local function getDangerPlayer()
     local hrp = getHRP()
     if not hrp or not settings.avoidEnabled then return nil end
@@ -52,73 +69,50 @@ local function getDangerPlayer()
     return nil
 end
 
--- ================= GUI Nato Hub (V5 Auto-Fly) =================
+-- ================= GUI Nato Hub V9 (Anti-Void Edition) =================
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "NatoHub_AutoFly"
+gui.Name = "NatoHub_V9"
 gui.ResetOnSpawn = false
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0, 280, 0, 350)
-panel.Position = UDim2.new(0.5, -140, 0.5, -175)
+panel.Size = UDim2.new(0, 280, 0, 420)
+panel.Position = UDim2.new(0.5, -140, 0.5, -210)
 panel.BackgroundColor3 = Color3.fromRGB(15, 12, 28)
 panel.BorderSizePixel = 0
 panel.Active = true; panel.Draggable = true
 Instance.new("UICorner", panel)
 
 local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1, 0, 0, 45); title.Text = "  Nato Hub | Auto-Fly V5"; title.TextColor3 = Color3.new(1,1,1)
+title.Size = UDim2.new(1, 0, 0, 45); title.Text = "  Nato Hub | V9 Anti-Void"; title.TextColor3 = Color3.new(1,1,1)
 title.Font = Enum.Font.GothamBold; title.BackgroundTransparency = 1; title.TextXAlignment = Enum.TextXAlignment.Left
 
--- ปุ่มเปิด/ปิด ระบบบินฟาร์มอัตโนมัติ (ตัวละครจะลอยและบินไปเอง)
+-- ปุ่ม Toggle ต่างๆ
 local function createToggle(name, sub, pos, prop)
     local btn = Instance.new("TextButton", panel)
-    btn.Size = UDim2.new(0, 250, 0, 50); btn.Position = UDim2.new(0.5, -125, 0, pos)
-    btn.BackgroundColor3 = Color3.fromRGB(30, 25, 50); btn.Text = ""; Instance.new("UICorner", btn)
+    btn.Size = UDim2.new(0, 250, 0, 55); btn.Position = UDim2.new(0.5, -125, 0, pos)
+    btn.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(30, 25, 55)
+    btn.Text = ""; Instance.new("UICorner", btn)
     
     local tl = Instance.new("TextLabel", btn)
-    tl.Size = UDim2.new(1, 0, 0, 25); tl.Position = UDim2.new(0, 12, 0, 5); tl.Text = name
+    tl.Size = UDim2.new(1, 0, 0, 25); tl.Position = UDim2.new(0, 12, 0, 8); tl.Text = name
     tl.TextColor3 = Color3.new(1,1,1); tl.Font = Enum.Font.GothamBold; tl.BackgroundTransparency = 1; tl.TextXAlignment = Enum.TextXAlignment.Left
     
     local sl = Instance.new("TextLabel", btn)
-    sl.Size = UDim2.new(1, 0, 0, 15); sl.Position = UDim2.new(0, 12, 0, 25); sl.Text = sub
+    sl.Size = UDim2.new(1, 0, 0, 15); sl.Position = UDim2.new(0, 12, 0, 28); sl.Text = sub
     sl.TextColor3 = Color3.fromRGB(140, 140, 160); sl.Font = Enum.Font.Gotham; sl.TextSize = 10; sl.BackgroundTransparency = 1; sl.TextXAlignment = Enum.TextXAlignment.Left
 
     btn.MouseButton1Click:Connect(function()
         settings[prop] = not settings[prop]
-        btn.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(30, 25, 50)
+        btn.BackgroundColor3 = settings[prop] and Color3.fromRGB(130, 60, 255) or Color3.fromRGB(30, 25, 55)
     end)
 end
 
-createToggle("🚀 Auto Fly Farm", "Fly & collect food automatically", 60, "flyFarm")
-createToggle("🛡️ Avoid Players", "Escape from big dinos (150s)", 120, "avoidEnabled")
+createToggle("🚀 Auto Fly to Food", "Move to nearest food", 60, "flyToFood")
+createToggle("🦖 Hunt Weaker Players", "Fly to weaker players", 125, "huntWeaker")
+createToggle("🛡️ Avoid Bigger Dinos", "Escape danger (150s)", 190, "avoidEnabled")
+createToggle("🚫 Anti-Void System", "Prevent falling off map", 255, "antiVoid")
 
--- Slider ปรับความเร็ว
-local speedLbl = Instance.new("TextLabel", panel)
-speedLbl.Size = UDim2.new(1, 0, 0, 20); speedLbl.Position = UDim2.new(0, 0, 0, 200)
-speedLbl.Text = "Speed: 100 studs/s"; speedLbl.TextColor3 = Color3.new(0.8,0.8,1); speedLbl.BackgroundTransparency = 1
-
-local track = Instance.new("Frame", panel)
-track.Size = UDim2.new(0, 240, 0, 6); track.Position = UDim2.new(0.5, -120, 0, 235)
-track.BackgroundColor3 = Color3.fromRGB(40, 40, 60); Instance.new("UICorner", track)
-
-local knob = Instance.new("TextButton", track)
-knob.Size = UDim2.new(0, 18, 0, 18); knob.Position = UDim2.new(0.1, -9, 0.5, -9)
-knob.BackgroundColor3 = Color3.new(1,1,1); knob.Text = ""; Instance.new("UICorner", knob)
-
--- Slider Logic
-local dragging = false
-knob.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
-UserInputService.InputChanged:Connect(function(i)
-    if dragging and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
-        local ratio = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-        settings.tweenSpeed = math.max(1, math.floor(ratio * 1000))
-        knob.Position = UDim2.new(ratio, -9, 0.5, -9)
-        speedLbl.Text = "Speed: " .. settings.tweenSpeed .. " studs/s"
-    end
-end)
-
--- ปุ่ม Nato ซ่อนเมนู (Mobile Style)
+-- ปุ่ม Nato ซ่อนเมนู (Mobile)
 local floatBtn = Instance.new("TextButton", gui)
 floatBtn.Size = UDim2.new(0, 45, 0, 45); floatBtn.Position = UDim2.new(0, 20, 0, 20)
 floatBtn.BackgroundColor3 = Color3.fromRGB(130, 60, 255); floatBtn.Text = "Nato"; floatBtn.TextColor3 = Color3.new(1,1,1)
@@ -127,30 +121,42 @@ floatBtn.MouseButton1Click:Connect(function() panel.Visible = not panel.Visible 
 
 -- ================= MAIN LOOP =================
 RunService.Heartbeat:Connect(function(dt)
-    if not settings.flyFarm then return end
     local hrp = getHRP()
     if not hrp then return end
 
-    -- ปิดแรงโน้มถ่วงชั่วขณะ (กันตกล่วงหน้า)
-    hrp.Velocity = Vector3.new(0, 0.1, 0)
-
-    -- 1. ลำดับที่ 1: หนีคนตัวใหญ่ (Avoid)
-    local danger = getDangerPlayer()
-    if danger then
-        local escapeDir = (hrp.Position - danger.Position).Unit
-        -- บินหนีขึ้นฟ้าเฉียงๆ เพื่อความปลอดภัย
-        hrp.CFrame = CFrame.new(hrp.Position + (escapeDir + Vector3.new(0, 0.5, 0)).Unit * (settings.tweenSpeed * dt))
+    -- 🛡️ 1. ระบบ Anti-Void (ลำดับความสำคัญสูงสุด)
+    if settings.antiVoid and hrp.Position.Y < -50 then -- ถ้าความสูงต่ำกว่า -50
+        hrp.Velocity = Vector3.new(0, 0, 0) -- หยุดแรงเหวี่ยง
+        hrp.CFrame = CFrame.new(hrp.Position.X, 100, hrp.Position.Z) -- วาร์ปกลับขึ้นมาบนฟ้าที่ความสูง 100
         return
     end
 
-    -- 2. ลำดับที่ 2: บินไปหาของกิน (Auto Fly to Food)
-    local food = getClosestFood()
-    if food then
-        local targetPos = food.position
+    -- 🛡️ 2. ระบบหนีตัวใหญ่
+    local danger = getDangerPlayer()
+    if danger then
+        local escapeDir = (hrp.Position - danger.Position).Unit
+        hrp.CFrame = CFrame.new(hrp.Position + (escapeDir + Vector3.new(0, 0.3, 0)).Unit * (settings.tweenSpeed * dt))
+        return
+    end
+
+    local targetPos = nil
+
+    -- 🎯 3. บินหาคนพลังน้อย
+    local weaker = getWeakerPlayer()
+    if weaker then targetPos = weaker.Position end
+
+    -- 🎯 4. บินหาของกิน
+    if not targetPos and settings.flyToFood then
+        local food = getClosestFood()
+        if food then targetPos = food.position end
+    end
+
+    -- ✈️ การเคลื่อนที่ไปยังเป้าหมาย
+    if targetPos then
         local diff = targetPos - hrp.Position
-        if diff.Magnitude > 2 then
-            -- บินตรงไปยังจุดที่ของกินอยู่ (ขยับ CFrame โดยตรงในอากาศ)
+        if diff.Magnitude > 1.5 then
             hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * (settings.tweenSpeed * dt))
+            hrp.Velocity = Vector3.new(0, 0.1, 0) -- ต้านแรงโน้มถ่วง
         end
     end
 end)
