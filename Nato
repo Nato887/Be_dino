@@ -71,14 +71,12 @@ local function getDangerPlayer()
     return nearest
 end
 
--- TWEEN MOVE (FIXED)
+-- TWEEN MOVE
 local function tweenTo(pos, speed)
     local hrp = getHRP()
     if not hrp then return end
 
-    if currentTween then
-        currentTween:Cancel()
-    end
+    if currentTween then currentTween:Cancel() end
 
     local dist = (hrp.Position - pos).Magnitude
     if dist < 2 then return end
@@ -94,7 +92,7 @@ local function tweenTo(pos, speed)
     currentTween:Play()
 end
 
--- LOOP (FIXED)
+-- LOOP
 local moverConn
 local function stopMover()
     if moverConn then moverConn:Disconnect() moverConn = nil end
@@ -164,6 +162,22 @@ title.TextColor3 = Color3.fromRGB(0,255,150)
 title.BackgroundColor3 = Color3.fromRGB(30,30,45)
 title.Font = Enum.Font.GothamBold
 
+-- TOGGLE MENU
+local toggleBtn = Instance.new("TextButton", mainGui)
+toggleBtn.Size = UDim2.new(0,110,0,35)
+toggleBtn.Position = UDim2.new(0,10,0,10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40,180,80)
+toggleBtn.Text = "HIDE MENU"
+toggleBtn.TextColor3 = Color3.new(1,1,1)
+toggleBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", toggleBtn)
+
+toggleBtn.MouseButton1Click:Connect(function()
+    panel.Visible = not panel.Visible
+    toggleBtn.Text = panel.Visible and "HIDE MENU" or "SHOW MENU"
+end)
+
+-- BUTTON
 local function createBtn(name,x,y,w,color,callback)
     local b = Instance.new("TextButton", panel)
     b.Size = UDim2.new(0,w,0,40)
@@ -233,7 +247,7 @@ createBtn("WHITE SCREEN",235,190,205,Color3.fromRGB(70,70,100),function(b)
     end
 end)
 
--- SLIDER
+-- SLIDER REAL
 local function makeSlider(y, max, default, name, callback)
     local label = Instance.new("TextLabel", panel)
     label.Size = UDim2.new(0,420,0,20)
@@ -241,16 +255,54 @@ local function makeSlider(y, max, default, name, callback)
     label.Text = name..": "..default
     label.TextColor3 = Color3.new(1,1,1)
     label.BackgroundTransparency = 1
+    label.TextXAlignment = Enum.TextXAlignment.Left
 
-    local bar = Instance.new("TextButton", panel)
-    bar.Size = UDim2.new(0,420,0,10)
-    bar.Position = UDim2.new(0,20,0,y+25)
-    bar.BackgroundColor3 = Color3.fromRGB(0,255,150)
+    local track = Instance.new("Frame", panel)
+    track.Size = UDim2.new(0,420,0,8)
+    track.Position = UDim2.new(0,20,0,y+25)
+    track.BackgroundColor3 = Color3.fromRGB(60,60,80)
+    Instance.new("UICorner", track)
 
-    bar.MouseButton1Down:Connect(function()
-        local val = math.random(1,max)
+    local fill = Instance.new("Frame", track)
+    fill.Size = UDim2.new(default/max,0,1,0)
+    fill.BackgroundColor3 = Color3.fromRGB(0,255,150)
+    Instance.new("UICorner", fill)
+
+    local knob = Instance.new("Frame", track)
+    knob.Size = UDim2.new(0,20,0,20)
+    knob.Position = UDim2.new(default/max,-10,0.5,-10)
+    knob.BackgroundColor3 = Color3.new(1,1,1)
+    Instance.new("UICorner", knob)
+
+    local dragging = false
+
+    local function update(input)
+        local delta = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local val = math.floor(delta * max)
+
+        fill.Size = UDim2.new(delta,0,1,0)
+        knob.Position = UDim2.new(delta,-10,0.5,-10)
         label.Text = name..": "..val
+
         callback(val)
+    end
+
+    knob.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            update(input)
+        end
     end)
 end
 
