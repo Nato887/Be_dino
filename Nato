@@ -19,6 +19,7 @@ local fastMode = false
 
 local currentTween = nil
 local currentTarget = nil
+local startTime = os.time() -- 🔥 ไม่รี
 
 -- UTILS
 local function getHRP(target)
@@ -69,17 +70,20 @@ local function getDangerPlayer()
     return nearest
 end
 
--- TWEEN
+-- TWEEN FIX
 local function tweenTo(pos, speed)
     local hrp = getHRP()
     if not hrp then return end
 
-    if currentTween then currentTween:Cancel() end
+    if currentTween then
+        currentTween:Cancel()
+        currentTween = nil
+    end
 
     local dist = (hrp.Position - pos).Magnitude
-    if dist < 2 then return end
+    if dist < 3 then return end
 
-    local time = dist / speed
+    local time = math.clamp(dist / speed, 0.1, 5)
 
     currentTween = TweenService:Create(
         hrp,
@@ -88,6 +92,10 @@ local function tweenTo(pos, speed)
     )
 
     currentTween:Play()
+
+    currentTween.Completed:Connect(function()
+        currentTween = nil
+    end)
 end
 
 -- LOOP
@@ -130,8 +138,10 @@ local function startMovementLoop()
             end
 
             if foodPos then
-                if not currentTarget or (foodPos - currentTarget).Magnitude > 10 then
+                if not currentTarget or (foodPos - currentTarget).Magnitude > 5 then
                     currentTarget = foodPos
+                    tweenTo(foodPos, farmSpeed)
+                elseif not currentTween then
                     tweenTo(foodPos, farmSpeed)
                 end
             end
@@ -141,6 +151,8 @@ end
 
 -- GUI
 local whiteGui = Instance.new("ScreenGui", player.PlayerGui)
+whiteGui.IgnoreGuiInset = true
+
 local mainGui = Instance.new("ScreenGui", player.PlayerGui)
 
 local panel = Instance.new("Frame", mainGui)
@@ -149,7 +161,7 @@ panel.Position = UDim2.new(0.5,-230,0.5,-150)
 panel.BackgroundColor3 = Color3.fromRGB(40,40,40)
 panel.Active = true
 panel.Draggable = false
-Instance.new("UICorner", panel)
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0,16)
 
 local stroke = Instance.new("UIStroke", panel)
 stroke.Color = Color3.fromRGB(0,255,100)
@@ -160,8 +172,9 @@ title.Size = UDim2.new(1,0,0,40)
 title.Text = "🦖 Be Dino By Nato"
 title.TextColor3 = Color3.fromRGB(0,255,150)
 title.BackgroundColor3 = Color3.fromRGB(30,30,45)
+Instance.new("UICorner", title)
 
--- DRAG เฉพาะหัว
+-- DRAG
 local dragging = false
 local startPos, startFramePos
 
@@ -193,6 +206,7 @@ toggleBtn.Size = UDim2.new(0,110,0,35)
 toggleBtn.Position = UDim2.new(0,10,0,10)
 toggleBtn.Text = "HIDE MENU"
 toggleBtn.BackgroundColor3 = Color3.fromRGB(40,180,80)
+Instance.new("UICorner", toggleBtn)
 
 toggleBtn.MouseButton1Click:Connect(function()
     panel.Visible = not panel.Visible
@@ -207,7 +221,7 @@ local function createBtn(name,x,y,w,color,callback)
     b.Text = name
     b.BackgroundColor3 = color
     b.TextColor3 = Color3.new(1,1,1)
-    Instance.new("UICorner", b)
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,12)
     b.MouseButton1Click:Connect(function() callback(b) end)
 end
 
@@ -232,19 +246,19 @@ createBtn("AVOID",20,190,205,Color3.fromRGB(255,130,0),function(b)
     b.Text = avoidPlayerEnabled and "AVOID: ON" or "AVOID: OFF"
 end)
 
--- WHITE SCREEN
+-- WHITE SCREEN FIX
 local whiteLabel
-local startTime = 0
 
 createBtn("WHITE SCREEN",235,190,205,Color3.fromRGB(70,70,100),function(b)
     whiteScreenOn = not whiteScreenOn
     b.Text = whiteScreenOn and "WHITE: ON" or "WHITE SCREEN"
 
     if whiteScreenOn then
-        startTime = os.time()
+        if whiteGui:FindFirstChild("Overlay") then return end
 
-        local f = Instance.new("Frame", whiteGui)
+        local f = Instance.new("Frame")
         f.Name = "Overlay"
+        f.Parent = whiteGui
         f.Size = UDim2.new(1,0,1,0)
         f.BackgroundColor3 = Color3.new(1,1,1)
         f.ZIndex = 999999
@@ -292,21 +306,18 @@ local function makeSlider(y, max, default, name, callback)
     track.Position = UDim2.new(0,20,0,y+25)
     track.Size = UDim2.new(0,420,0,8)
     track.BackgroundColor3 = Color3.fromRGB(120,120,120)
+    Instance.new("UICorner", track)
 
     local knob = Instance.new("Frame", track)
     knob.Size = UDim2.new(0,20,0,20)
     knob.BackgroundColor3 = Color3.new(1,1,1)
     knob.Position = UDim2.new(default/max,-10,0.5,-10)
-
-    local corner = Instance.new("UICorner", knob)
-    corner.CornerRadius = UDim.new(1,0)
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
 
     local dragging = false
 
-    knob.InputBegan:Connect(function(input)
-        if input.UserInputType.Name:find("Mouse") or input.UserInputType.Name:find("Touch") then
-            dragging = true
-        end
+    knob.InputBegan:Connect(function()
+        dragging = true
     end)
 
     UserInputService.InputEnded:Connect(function()
