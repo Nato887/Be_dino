@@ -9,7 +9,6 @@ local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
 -- CONFIG
-local SAFE_Y = -50
 local running = false
 local farmSpeed = 100
 local avoidSpeed = 150
@@ -18,7 +17,6 @@ local whiteScreenOn = false
 local avoidPlayerEnabled = false
 local fastMode = false
 
--- TWEEN STATE
 local currentTween = nil
 local currentTarget = nil
 
@@ -71,7 +69,7 @@ local function getDangerPlayer()
     return nearest
 end
 
--- TWEEN MOVE
+-- TWEEN
 local function tweenTo(pos, speed)
     local hrp = getHRP()
     if not hrp then return end
@@ -101,6 +99,7 @@ end
 
 local function startMovementLoop()
     stopMover()
+    currentTarget = nil
 
     moverConn = RunService.Heartbeat:Connect(function()
         local hrp = getHRP()
@@ -135,6 +134,8 @@ local function startMovementLoop()
                 if not currentTarget or (foodPos - currentTarget).Magnitude > 10 then
                     currentTarget = foodPos
                     tweenTo(foodPos, farmSpeed)
+                elseif currentTween == nil then
+                    tweenTo(foodPos, farmSpeed)
                 end
             end
         end
@@ -143,8 +144,6 @@ end
 
 -- GUI
 local whiteGui = Instance.new("ScreenGui", player.PlayerGui)
-whiteGui.IgnoreGuiInset = true
-
 local mainGui = Instance.new("ScreenGui", player.PlayerGui)
 
 local panel = Instance.new("Frame", mainGui)
@@ -152,7 +151,7 @@ panel.Size = UDim2.new(0,460,0,300)
 panel.Position = UDim2.new(0.5,-230,0.5,-150)
 panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
 panel.Active = true
-panel.Draggable = true
+panel.Draggable = false
 Instance.new("UICorner", panel)
 
 local title = Instance.new("TextLabel", panel)
@@ -160,17 +159,39 @@ title.Size = UDim2.new(1,0,0,40)
 title.Text = "🦖 Be Dino By Nato"
 title.TextColor3 = Color3.fromRGB(0,255,150)
 title.BackgroundColor3 = Color3.fromRGB(30,30,45)
-title.Font = Enum.Font.GothamBold
 
--- TOGGLE MENU
+-- DRAG เฉพาะหัว
+local dragging = false
+local startPos, startFramePos
+
+title.InputBegan:Connect(function(input)
+    dragging = true
+    startPos = input.Position
+    startFramePos = panel.Position
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging then
+        local delta = input.Position - startPos
+        panel.Position = UDim2.new(
+            startFramePos.X.Scale,
+            startFramePos.X.Offset + delta.X,
+            startFramePos.Y.Scale,
+            startFramePos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+UserInputService.InputEnded:Connect(function()
+    dragging = false
+end)
+
+-- TOGGLE
 local toggleBtn = Instance.new("TextButton", mainGui)
 toggleBtn.Size = UDim2.new(0,110,0,35)
 toggleBtn.Position = UDim2.new(0,10,0,10)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(40,180,80)
 toggleBtn.Text = "HIDE MENU"
-toggleBtn.TextColor3 = Color3.new(1,1,1)
-toggleBtn.Font = Enum.Font.GothamBold
-Instance.new("UICorner", toggleBtn)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40,180,80)
 
 toggleBtn.MouseButton1Click:Connect(function()
     panel.Visible = not panel.Visible
@@ -185,8 +206,6 @@ local function createBtn(name,x,y,w,color,callback)
     b.Text = name
     b.BackgroundColor3 = color
     b.TextColor3 = Color3.new(1,1,1)
-    b.Font = Enum.Font.GothamBold
-    Instance.new("UICorner", b)
     b.MouseButton1Click:Connect(function() callback(b) end)
 end
 
@@ -200,10 +219,8 @@ createBtn("STOP",165,240,130,Color3.fromRGB(220,50,50),function()
     stopMover()
 end)
 
-createBtn("FAST MODE",310,240,130,Color3.fromRGB(90,90,120),function(b)
-    fastMode = not fastMode
-    if fastMode then runFastMode() end
-    b.Text = fastMode and "FAST: ON" or "FAST MODE"
+createBtn("FAST",310,240,130,Color3.fromRGB(90,90,120),function()
+    runFastMode()
 end)
 
 createBtn("AVOID",20,190,205,Color3.fromRGB(255,130,0),function(b)
@@ -211,7 +228,7 @@ createBtn("AVOID",20,190,205,Color3.fromRGB(255,130,0),function(b)
     b.Text = avoidPlayerEnabled and "AVOID: ON" or "AVOID: OFF"
 end)
 
--- WHITE SCREEN + TIMER
+-- WHITE SCREEN
 local whiteLabel
 local startTime = 0
 
@@ -223,6 +240,7 @@ createBtn("WHITE SCREEN",235,190,205,Color3.fromRGB(70,70,100),function(b)
         startTime = os.time()
 
         local f = Instance.new("Frame", whiteGui)
+        f.Name = "Overlay"
         f.Size = UDim2.new(1,0,1,0)
         f.BackgroundColor3 = Color3.new(1,1,1)
 
@@ -230,78 +248,57 @@ createBtn("WHITE SCREEN",235,190,205,Color3.fromRGB(70,70,100),function(b)
         whiteLabel.Size = UDim2.new(1,0,1,0)
         whiteLabel.BackgroundTransparency = 1
         whiteLabel.TextColor3 = Color3.new(0,0,0)
-        whiteLabel.Font = Enum.Font.GothamBold
+        whiteLabel.TextScaled = true
 
         task.spawn(function()
             while whiteScreenOn and whiteLabel do
                 local t = os.time() - startTime
-                whiteLabel.Text = "🦖 FARMING\nTime: "..t.."s"
+                local m = math.floor(t/60)
+                local s = t % 60
+                whiteLabel.Text = "🦖 FARMING\nTime: "..m.."m "..s.."s"
                 task.wait(1)
             end
         end)
     else
-        if whiteGui:FindFirstChildOfClass("Frame") then
-            whiteGui:FindFirstChildOfClass("Frame"):Destroy()
+        if whiteGui:FindFirstChild("Overlay") then
+            whiteGui.Overlay:Destroy()
         end
         whiteLabel = nil
     end
 end)
 
--- SLIDER REAL
+-- SLIDER
 local function makeSlider(y, max, default, name, callback)
     local label = Instance.new("TextLabel", panel)
-    label.Size = UDim2.new(0,420,0,20)
     label.Position = UDim2.new(0,20,0,y)
+    label.Size = UDim2.new(0,420,0,20)
     label.Text = name..": "..default
-    label.TextColor3 = Color3.new(1,1,1)
     label.BackgroundTransparency = 1
-    label.TextXAlignment = Enum.TextXAlignment.Left
 
     local track = Instance.new("Frame", panel)
-    track.Size = UDim2.new(0,420,0,8)
     track.Position = UDim2.new(0,20,0,y+25)
-    track.BackgroundColor3 = Color3.fromRGB(60,60,80)
-    Instance.new("UICorner", track)
-
-    local fill = Instance.new("Frame", track)
-    fill.Size = UDim2.new(default/max,0,1,0)
-    fill.BackgroundColor3 = Color3.fromRGB(0,255,150)
-    Instance.new("UICorner", fill)
+    track.Size = UDim2.new(0,420,0,8)
 
     local knob = Instance.new("Frame", track)
     knob.Size = UDim2.new(0,20,0,20)
-    knob.Position = UDim2.new(default/max,-10,0.5,-10)
-    knob.BackgroundColor3 = Color3.new(1,1,1)
-    Instance.new("UICorner", knob)
 
     local dragging = false
 
-    local function update(input)
-        local delta = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-        local val = math.floor(delta * max)
-
-        fill.Size = UDim2.new(delta,0,1,0)
-        knob.Position = UDim2.new(delta,-10,0.5,-10)
-        label.Text = name..": "..val
-
-        callback(val)
-    end
-
-    knob.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-        end
+    knob.InputBegan:Connect(function()
+        dragging = true
     end)
 
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
+    UserInputService.InputEnded:Connect(function()
+        dragging = false
     end)
 
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            update(input)
+        if dragging then
+            local delta = math.clamp((input.Position.X - track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+            local val = math.floor(delta*max)
+            knob.Position = UDim2.new(delta,-10,0.5,-10)
+            label.Text = name..": "..val
+            callback(val)
         end
     end)
 end
