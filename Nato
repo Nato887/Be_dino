@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
@@ -17,7 +18,6 @@ local whiteScreenOn = false
 local avoidPlayerEnabled = false
 local fastMode = false
 
--- ⏱️ เวลาเริ่ม
 local startTime = os.time()
 
 -- [[ UTILS ]]
@@ -88,9 +88,11 @@ local function startMovementLoop()
         local hrp = getHRP()
         if not hrp or not running then return end
         
+        -- กันตกแมพ
         if hrp.Position.Y < SAFE_Y then
             hrp.CFrame = CFrame.new(hrp.Position.X, 50, hrp.Position.Z)
             hrp.AssemblyLinearVelocity = Vector3.zero
+            return
         end
 
         local danger = getDangerPlayer()
@@ -103,7 +105,15 @@ local function startMovementLoop()
                 move = move.Unit * 20
             end
 
-            hrp.CFrame = CFrame.new(hrp.Position + move)
+            local newPos = hrp.Position + move
+            newPos = Vector3.new(newPos.X, hrp.Position.Y, newPos.Z)
+
+            TweenService:Create(
+                hrp,
+                TweenInfo.new(0.05, Enum.EasingStyle.Linear),
+                {CFrame = CFrame.new(newPos)}
+            ):Play()
+
         else
             local foodPos, dist = nil, math.huge
             for _, f in CollectionService:GetTagged("Food") do
@@ -117,10 +127,19 @@ local function startMovementLoop()
             if foodPos then
                 local diff = foodPos - hrp.Position
                 local currentDist = diff.Magnitude
+
                 if currentDist > 0.1 then
                     local step = math.min(farmSpeed * dt, currentDist)
                     local newPos = hrp.Position + (diff.Unit * step)
-                    hrp.CFrame = CFrame.new(newPos.X, hrp.Position.Y, newPos.Z)
+
+                    -- ล็อค Y กันตก
+                    newPos = Vector3.new(newPos.X, hrp.Position.Y, newPos.Z)
+
+                    TweenService:Create(
+                        hrp,
+                        TweenInfo.new(0.05, Enum.EasingStyle.Linear),
+                        {CFrame = CFrame.new(newPos)}
+                    ):Play()
                 end
             else
                 hrp.AssemblyLinearVelocity = Vector3.zero
@@ -129,7 +148,7 @@ local function startMovementLoop()
     end)
 end
 
--- [[ GUI ]]
+-- [[ GUI (เหมือนเดิม) ]]
 local whiteGui = Instance.new("ScreenGui", player.PlayerGui)
 whiteGui.IgnoreGuiInset = true
 whiteGui.DisplayOrder = 1
@@ -152,8 +171,7 @@ title.Text = "🦖 BE-DINO-FARM"
 title.TextColor3 = Color3.fromRGB(0, 255, 150)
 title.BackgroundColor3 = Color3.fromRGB(28, 28, 45)
 title.Font = Enum.Font.GothamBold
-title.TextSize = 16
-Instance.new("UICorner", title).CornerRadius = UDim.new(0, 18)
+Instance.new("UICorner", title)
 
 local toggleBtn = Instance.new("TextButton", mainGui)
 toggleBtn.Size = UDim2.new(0, 110, 0, 34)
@@ -182,7 +200,6 @@ local function createBtn(name, x, y, w, color, callback)
     return btn
 end
 
--- BUTTONS
 createBtn("START", 20, 190, 130, Color3.fromRGB(0,200,100), function()
     startTime = os.time()
     running = true
