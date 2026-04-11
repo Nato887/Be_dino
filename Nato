@@ -3,11 +3,12 @@ local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
 
--- [[ CONFIGURATION ]]
+-- CONFIG
 local SAFE_Y = -50
 local running = false
 local farmSpeed = 100
@@ -17,7 +18,10 @@ local whiteScreenOn = false
 local avoidPlayerEnabled = false
 local fastMode = false
 
--- [[ UTILS ]]
+-- TWEEN
+local currentTween = nil
+
+-- UTILS
 local function getHRP(target)
     local char = target or player.Character
     if not char then return nil end
@@ -30,25 +34,7 @@ local function getGrowth(plr)
     return 0
 end
 
--- 🔥 RAYCAST หา Y พื้น
-local function getGroundY(pos)
-    local rayOrigin = pos + Vector3.new(0, 50, 0)
-    local rayDir = Vector3.new(0, -200, 0)
-
-    local params = RaycastParams.new()
-    params.FilterDescendantsInstances = {player.Character}
-    params.FilterType = Enum.RaycastFilterType.Blacklist
-
-    local result = workspace:Raycast(rayOrigin, rayDir, params)
-
-    if result then
-        return result.Position.Y + 3
-    else
-        return pos.Y
-    end
-end
-
--- [[ FAST MODE ]]
+-- FAST MODE
 local function runFastMode()
     for _, v in pairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") or v:IsA("MeshPart") then
@@ -60,7 +46,7 @@ local function runFastMode()
     end
 end
 
--- [[ AVOID PLAYER ]]
+-- AVOID PLAYER
 local function getDangerPlayer()
     if not avoidPlayerEnabled then return nil end
     local hrp = getHRP()
@@ -84,23 +70,50 @@ local function getDangerPlayer()
     return nearest
 end
 
--- [[ MOVEMENT ]]
+-- STOP TWEEN
+local function stopTween()
+    if currentTween then
+        currentTween:Cancel()
+        currentTween = nil
+    end
+end
+
+-- TWEEN MOVE
+local function tweenTo(targetPos, speed)
+    local hrp = getHRP()
+    if not hrp then return end
+
+    stopTween()
+
+    local dist = (hrp.Position - targetPos).Magnitude
+    local time = dist / speed
+
+    local tween = TweenService:Create(
+        hrp,
+        TweenInfo.new(time, Enum.EasingStyle.Linear),
+        {CFrame = CFrame.new(targetPos)}
+    )
+
+    currentTween = tween
+    tween:Play()
+end
+
+-- LOOP
 local moverConn
 local function stopMover()
     if moverConn then moverConn:Disconnect() moverConn = nil end
+    stopTween()
 end
 
 local function startMovementLoop()
     stopMover()
-    moverConn = RunService.Heartbeat:Connect(function(dt)
+    moverConn = RunService.Heartbeat:Connect(function()
         local hrp = getHRP()
         if not hrp or not running then return end
 
-        -- 🔥 กันตกแมพขั้นเทพ
         if hrp.Position.Y < SAFE_Y then
-            local safeY = getGroundY(hrp.Position)
-            hrp.CFrame = CFrame.new(hrp.Position.X, safeY + 10, hrp.Position.Z)
-            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.CFrame = CFrame.new(0, 50, 0)
+            stopTween()
             return
         end
 
@@ -108,18 +121,8 @@ local function startMovementLoop()
 
         if danger then
             local dir = (hrp.Position - danger.Position).Unit
-            local speedToUse = math.max(avoidSpeed, farmSpeed + 20)
-
-            local move = dir * (speedToUse * dt)
-            if move.Magnitude > 15 then
-                move = move.Unit * 15
-            end
-
-            local newPos = hrp.Position + move
-            local groundY = getGroundY(newPos)
-
-            hrp.CFrame = CFrame.new(newPos.X, groundY, newPos.Z)
-
+            local target = hrp.Position + dir * 100
+            tweenTo(target, avoidSpeed)
         else
             local foodPos, dist = nil, math.huge
             for _, f in CollectionService:GetTagged("Food") do
@@ -134,30 +137,13 @@ local function startMovementLoop()
             end
 
             if foodPos then
-                local diff = foodPos - hrp.Position
-                local dist = diff.Magnitude
-
-                if dist > 0.1 then
-                    local step = math.min(farmSpeed * dt, dist)
-                    local move = diff.Unit * step
-
-                    if move.Magnitude > 15 then
-                        move = move.Unit * 15
-                    end
-
-                    local newPos = hrp.Position + move
-                    local groundY = getGroundY(newPos)
-
-                    hrp.CFrame = CFrame.new(newPos.X, groundY, newPos.Z)
-                end
-            else
-                hrp.AssemblyLinearVelocity = Vector3.zero
+                tweenTo(foodPos, farmSpeed)
             end
         end
     end)
 end
 
--- [[ GUI (เหมือนเดิมทั้งหมด) ]]
+-- GUI
 local whiteGui = Instance.new("ScreenGui", player.PlayerGui)
 whiteGui.IgnoreGuiInset = true
 whiteGui.DisplayOrder = 1
@@ -176,7 +162,7 @@ Instance.new("UICorner", panel)
 
 local title = Instance.new("TextLabel", panel)
 title.Size = UDim2.new(1, 0, 0, 35)
-title.Text = "🦖 BE-DINO-FARM-NT FINAL 1000%"
+title.Text = "🦖 Be Dino By Nato"
 title.TextColor3 = Color3.fromRGB(0, 255, 150)
 title.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
 title.Font = Enum.Font.GothamBold
@@ -209,8 +195,15 @@ local function createBtn(name, x, y, sizeX, color, callback)
     return btn
 end
 
-createBtn("START", 20, 200, 130, Color3.fromRGB(45, 190, 85), function() running = true startMovementLoop() end)
-createBtn("STOP", 165, 200, 130, Color3.fromRGB(210, 50, 50), function() running = false stopMover() end)
+createBtn("START", 20, 200, 130, Color3.fromRGB(45, 190, 85), function()
+    running = true
+    startMovementLoop()
+end)
+
+createBtn("STOP", 165, 200, 130, Color3.fromRGB(210, 50, 50), function()
+    running = false
+    stopMover()
+end)
 
 createBtn("FAST MODE", 310, 200, 130, Color3.fromRGB(80, 80, 110), function(b)
     fastMode = not fastMode
@@ -221,7 +214,13 @@ end)
 createBtn("AVOID: OFF", 20, 150, 205, Color3.fromRGB(70, 70, 70), function(b)
     avoidPlayerEnabled = not avoidPlayerEnabled
     b.Text = avoidPlayerEnabled and "AVOID: ON" or "AVOID: OFF"
-    b.BackgroundColor3 = avoidPlayerEnabled and Color3.fromRGB(255, 130, 0) or Color3.fromRGB(70, 70, 70)
 end)
 
--- (WHITE SCREEN + SLIDER + ANTI AFK เหมือนเดิมทั้งหมด ไม่ได้ตัดออก)
+-- ANTI AFK
+task.spawn(function()
+    while true do
+        task.wait(30)
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end
+end)
