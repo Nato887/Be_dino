@@ -9,27 +9,23 @@ if not player.Character then player.CharacterAdded:Wait() end
 
 -- CONFIG
 local running = false
-local farmSpeed = 100
-local whiteScreenOn = false
-local fastMode = false
+local farmSpeed = 120
 local startTime = os.time()
 
 -- UTILS
 local function getHRP()
-    local char = player.Character
-    return char and char:FindFirstChild("HumanoidRootPart")
+    return player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 end
 
--- FIX: ไม่ตกแมพ (ล็อคแกน Y)
+-- MOVE (กันตกแมพ)
 local function moveTo(targetPos, speed, dt)
     local hrp = getHRP()
     if not hrp then return end
 
-    local safeY = hrp.Position.Y
-    local target = Vector3.new(targetPos.X, safeY, targetPos.Z)
-
+    local target = Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)
     local diff = target - hrp.Position
     local dist = diff.Magnitude
+
     if dist < 2 then return end
 
     local step = math.min(speed * dt, dist)
@@ -37,161 +33,184 @@ local function moveTo(targetPos, speed, dt)
 end
 
 -- LOOP
-local moverConn
-local function stopMover()
-    if moverConn then moverConn:Disconnect() moverConn = nil end
+local mover
+local function stopFarm()
+    running = false
+    if mover then mover:Disconnect() mover = nil end
 end
 
-local function startMovementLoop()
-    stopMover()
+local function startFarm()
+    stopFarm()
+    running = true
 
-    moverConn = RunService.Heartbeat:Connect(function(dt)
+    mover = RunService.Heartbeat:Connect(function(dt)
         if not running then return end
         local hrp = getHRP()
         if not hrp then return end
 
-        local foodPos, dist = nil, math.huge
+        local closest, dist = nil, math.huge
+        local foods = CollectionService:GetTagged("Food")
 
-        for _, f in CollectionService:GetTagged("Food") do
+        for _, f in pairs(foods) do
             if f and f.Parent then
-                local p = f:IsA("Model") and f:GetPivot().Position or f.Position
-                local d = (hrp.Position - p).Magnitude
+                local pos = f:IsA("Model") and f:GetPivot().Position or f.Position
+                local d = (hrp.Position - pos).Magnitude
                 if d < dist then
                     dist = d
-                    foodPos = p
+                    closest = pos
                 end
             end
         end
 
-        if foodPos then
-            moveTo(foodPos, farmSpeed, dt)
+        if closest then
+            moveTo(closest, farmSpeed, dt)
         end
     end)
 end
 
--- WHITE GUI
-local whiteGui = Instance.new("ScreenGui", player.PlayerGui)
-whiteGui.IgnoreGuiInset = true
+-- GUI
+local gui = Instance.new("ScreenGui", player.PlayerGui)
+gui.ResetOnSpawn = false
 
--- MAIN GUI
-local mainGui = Instance.new("ScreenGui", player.PlayerGui)
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0,280,0,260)
+frame.Position = UDim2.new(0.5,-140,0.5,-130)
+frame.BackgroundColor3 = Color3.fromRGB(15,15,25)
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0,14)
 
-local frame = Instance.new("Frame", mainGui)
-frame.Size = UDim2.new(0,240,0,260)
-frame.Position = UDim2.new(0,20,0.5,-130)
-frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
-frame.Active = true
-frame.Draggable = true
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0,12)
+-- HEADER
+local header = Instance.new("TextLabel", frame)
+header.Size = UDim2.new(1,0,0,35)
+header.Text = "Food Collector"
+header.TextColor3 = Color3.new(1,1,1)
+header.BackgroundTransparency = 1
+header.Font = Enum.Font.GothamBold
+header.TextSize = 16
 
-local stroke = Instance.new("UIStroke", frame)
-stroke.Color = Color3.fromRGB(0,255,120)
+-- CLOSE BTN
+local close = Instance.new("TextButton", frame)
+close.Size = UDim2.new(0,30,0,30)
+close.Position = UDim2.new(1,-35,0,5)
+close.Text = "X"
+close.BackgroundColor3 = Color3.fromRGB(220,50,50)
+Instance.new("UICorner", close)
 
-local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1,0,0,30)
-title.Text = "Be Dino Auto Farm | Nato"
-title.TextColor3 = Color3.fromRGB(0,255,120)
-title.BackgroundTransparency = 1
-
--- BUTTON
-local function makeButton(text, y, callback)
-    local btn = Instance.new("TextButton", frame)
-    btn.Size = UDim2.new(1,-20,0,32)
-    btn.Position = UDim2.new(0,10,0,y)
-    btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
-    btn.Text = text
-    btn.TextColor3 = Color3.new(1,1,1)
-    Instance.new("UICorner", btn)
-
-    btn.MouseButton1Click:Connect(function()
-        callback(btn)
-    end)
-end
-
-makeButton("Start Farm",40,function()
-    running = true
-    startMovementLoop()
+close.MouseButton1Click:Connect(function()
+    frame.Visible = false
 end)
 
-makeButton("Stop Farm",80,function()
-    running = false
-    stopMover()
-end)
+-- MINIMIZE
+local mini = Instance.new("TextButton", frame)
+mini.Size = UDim2.new(0,30,0,30)
+mini.Position = UDim2.new(1,-70,0,5)
+mini.Text = "-"
+mini.BackgroundColor3 = Color3.fromRGB(80,80,100)
+Instance.new("UICorner", mini)
 
-makeButton("Fast Mode",120,function(b)
-    fastMode = not fastMode
-    b.Text = fastMode and "Fast: ON" or "Fast Mode"
-end)
-
--- WHITE SCREEN
-local whiteLabel
-
-makeButton("White Screen",160,function(b)
-    whiteScreenOn = not whiteScreenOn
-
-    if whiteScreenOn then
-        local f = Instance.new("Frame", whiteGui)
-        f.Name = "Overlay"
-        f.Size = UDim2.new(1,0,1,0)
-        f.BackgroundColor3 = Color3.new(1,1,1)
-
-        whiteLabel = Instance.new("TextLabel", f)
-        whiteLabel.Size = UDim2.new(1,0,1,0)
-        whiteLabel.BackgroundTransparency = 1
-        whiteLabel.TextColor3 = Color3.new(0,0,0)
-        whiteLabel.TextScaled = true
-
-        task.spawn(function()
-            while whiteScreenOn and whiteLabel do
-                local t = os.time() - startTime
-                whiteLabel.Text = "FARMING\n\n"..t.."s"
-                task.wait(1)
-            end
-        end)
-    else
-        if whiteGui:FindFirstChild("Overlay") then
-            whiteGui.Overlay:Destroy()
+mini.MouseButton1Click:Connect(function()
+    for _,v in pairs(frame:GetChildren()) do
+        if v ~= header and v ~= close and v ~= mini then
+            v.Visible = not v.Visible
         end
     end
 end)
 
--- SLIDER (วงกลมลากได้)
-local label = Instance.new("TextLabel", frame)
-label.Position = UDim2.new(0,10,0,205)
-label.Size = UDim2.new(1,-20,0,20)
-label.Text = "Speed: "..farmSpeed
-label.TextColor3 = Color3.new(1,1,1)
-label.BackgroundTransparency = 1
+-- STATUS
+local status = Instance.new("TextLabel", frame)
+status.Position = UDim2.new(0,10,0,40)
+status.Size = UDim2.new(1,-20,0,20)
+status.Text = "Status: Stopped"
+status.TextColor3 = Color3.fromRGB(255,200,0)
+status.BackgroundTransparency = 1
 
+-- FOOD COUNT
+local foodLabel = Instance.new("TextLabel", frame)
+foodLabel.Position = UDim2.new(0,10,0,60)
+foodLabel.Size = UDim2.new(1,-20,0,20)
+foodLabel.Text = "Food: 0"
+foodLabel.TextColor3 = Color3.new(1,1,1)
+foodLabel.BackgroundTransparency = 1
+
+-- UPDATE FOOD COUNT
+task.spawn(function()
+    while true do
+        foodLabel.Text = "Food in world: "..#CollectionService:GetTagged("Food")
+        task.wait(1)
+    end
+end)
+
+-- SPEED TEXT
+local speedText = Instance.new("TextLabel", frame)
+speedText.Position = UDim2.new(0,10,0,90)
+speedText.Size = UDim2.new(1,-20,0,20)
+speedText.Text = "Speed: "..farmSpeed
+speedText.TextColor3 = Color3.new(1,1,1)
+speedText.BackgroundTransparency = 1
+
+-- SLIDER
 local track = Instance.new("Frame", frame)
-track.Position = UDim2.new(0,10,0,230)
+track.Position = UDim2.new(0,10,0,115)
 track.Size = UDim2.new(1,-20,0,6)
 track.BackgroundColor3 = Color3.fromRGB(80,80,80)
 Instance.new("UICorner", track)
 
 local knob = Instance.new("Frame", track)
-knob.Size = UDim2.new(0,18,0,18)
-knob.Position = UDim2.new(farmSpeed/1000,-9,0.5,-9)
-knob.BackgroundColor3 = Color3.new(1,1,1)
+knob.Size = UDim2.new(0,20,0,20)
+knob.Position = UDim2.new(farmSpeed/1000,-10,0.5,-10)
+knob.BackgroundColor3 = Color3.fromRGB(0,170,255)
 Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
 
 local dragging = false
 
-knob.InputBegan:Connect(function()
-    dragging = true
-end)
-
-UserInputService.InputEnded:Connect(function()
-    dragging = false
-end)
+knob.InputBegan:Connect(function() dragging = true end)
+UserInputService.InputEnded:Connect(function() dragging = false end)
 
 UserInputService.InputChanged:Connect(function(input)
     if dragging then
         local delta = math.clamp((input.Position.X - track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
         farmSpeed = math.floor(delta*1000)
-        knob.Position = UDim2.new(delta,-9,0.5,-9)
-        label.Text = "Speed: "..farmSpeed
+        knob.Position = UDim2.new(delta,-10,0.5,-10)
+        speedText.Text = "Speed: "..farmSpeed
     end
+end)
+
+-- START
+local startBtn = Instance.new("TextButton", frame)
+startBtn.Size = UDim2.new(0.45,0,0,40)
+startBtn.Position = UDim2.new(0.05,0,1,-50)
+startBtn.Text = "Start"
+startBtn.BackgroundColor3 = Color3.fromRGB(0,180,90)
+Instance.new("UICorner", startBtn)
+
+startBtn.MouseButton1Click:Connect(function()
+    startFarm()
+    status.Text = "Status: Running"
+end)
+
+-- STOP
+local stopBtn = Instance.new("TextButton", frame)
+stopBtn.Size = UDim2.new(0.45,0,0,40)
+stopBtn.Position = UDim2.new(0.5,0,1,-50)
+stopBtn.Text = "Stop"
+stopBtn.BackgroundColor3 = Color3.fromRGB(220,50,50)
+Instance.new("UICorner", stopBtn)
+
+stopBtn.MouseButton1Click:Connect(function()
+    stopFarm()
+    status.Text = "Status: Stopped"
+end)
+
+-- SHOW MENU BUTTON
+local toggle = Instance.new("TextButton", gui)
+toggle.Size = UDim2.new(0,120,0,35)
+toggle.Position = UDim2.new(0,10,0,10)
+toggle.Text = "Hide Menu"
+toggle.BackgroundColor3 = Color3.fromRGB(0,200,100)
+Instance.new("UICorner", toggle)
+
+toggle.MouseButton1Click:Connect(function()
+    frame.Visible = not frame.Visible
+    toggle.Text = frame.Visible and "Hide Menu" or "Show Menu"
 end)
 
 -- AFK
