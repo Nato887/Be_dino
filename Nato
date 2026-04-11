@@ -18,7 +18,6 @@ local whiteScreenOn = false
 local avoidPlayerEnabled = false
 local fastMode = false
 
--- TWEEN
 local currentTween = nil
 
 -- UTILS
@@ -39,7 +38,7 @@ local function runFastMode()
     for _, v in pairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") or v:IsA("MeshPart") then
             local n = v.Name:lower()
-            if n:find("tree") or n:find("rock") or n:find("mountain") or n:find("bush") then
+            if n:find("tree") or n:find("rock") or n:find("bush") then
                 v:Destroy()
             end
         end
@@ -70,7 +69,7 @@ local function getDangerPlayer()
     return nearest
 end
 
--- STOP TWEEN
+-- TWEEN
 local function stopTween()
     if currentTween then
         currentTween:Cancel()
@@ -78,21 +77,18 @@ local function stopTween()
     end
 end
 
--- TWEEN MOVE
-local function tweenTo(targetPos, speed)
+local function tweenTo(pos, speed)
     local hrp = getHRP()
     if not hrp then return end
 
     stopTween()
 
-    local dist = (hrp.Position - targetPos).Magnitude
+    local dist = (hrp.Position - pos).Magnitude
     local time = dist / speed
 
-    local tween = TweenService:Create(
-        hrp,
-        TweenInfo.new(time, Enum.EasingStyle.Linear),
-        {CFrame = CFrame.new(targetPos)}
-    )
+    local tween = TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {
+        CFrame = CFrame.new(pos)
+    })
 
     currentTween = tween
     tween:Play()
@@ -112,7 +108,7 @@ local function startMovementLoop()
         if not hrp or not running then return end
 
         if hrp.Position.Y < SAFE_Y then
-            hrp.CFrame = CFrame.new(0, 50, 0)
+            hrp.CFrame = CFrame.new(0,50,0)
             stopTween()
             return
         end
@@ -121,8 +117,7 @@ local function startMovementLoop()
 
         if danger then
             local dir = (hrp.Position - danger.Position).Unit
-            local target = hrp.Position + dir * 100
-            tweenTo(target, avoidSpeed)
+            tweenTo(hrp.Position + dir * 100, avoidSpeed)
         else
             local foodPos, dist = nil, math.huge
             for _, f in CollectionService:GetTagged("Food") do
@@ -135,7 +130,6 @@ local function startMovementLoop()
                     end
                 end
             end
-
             if foodPos then
                 tweenTo(foodPos, farmSpeed)
             end
@@ -146,77 +140,119 @@ end
 -- GUI
 local whiteGui = Instance.new("ScreenGui", player.PlayerGui)
 whiteGui.IgnoreGuiInset = true
-whiteGui.DisplayOrder = 1
 
 local mainGui = Instance.new("ScreenGui", player.PlayerGui)
-mainGui.DisplayOrder = 99
-mainGui.ResetOnSpawn = false
 
 local panel = Instance.new("Frame", mainGui)
-panel.Size = UDim2.new(0, 460, 0, 260)
-panel.Position = UDim2.new(0.5, -230, 0.5, -130)
-panel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+panel.Size = UDim2.new(0,460,0,300)
+panel.Position = UDim2.new(0.5,-230,0.5,-150)
+panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
 panel.Active = true
 panel.Draggable = true
 Instance.new("UICorner", panel)
 
 local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1, 0, 0, 35)
+title.Size = UDim2.new(1,0,0,40)
 title.Text = "🦖 Be Dino By Nato"
-title.TextColor3 = Color3.fromRGB(0, 255, 150)
-title.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+title.TextColor3 = Color3.fromRGB(0,255,150)
+title.BackgroundColor3 = Color3.fromRGB(30,30,45)
 title.Font = Enum.Font.GothamBold
-Instance.new("UICorner", title)
 
-local toggleBtn = Instance.new("TextButton", mainGui)
-toggleBtn.Size = UDim2.new(0, 100, 0, 32)
-toggleBtn.Position = UDim2.new(0, 10, 0, 10)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
-toggleBtn.Text = "HIDE MENU"
-toggleBtn.TextColor3 = Color3.new(1,1,1)
-toggleBtn.Font = Enum.Font.GothamBold
-Instance.new("UICorner", toggleBtn)
-
-toggleBtn.MouseButton1Click:Connect(function()
-    panel.Visible = not panel.Visible
-    toggleBtn.Text = panel.Visible and "HIDE MENU" or "SHOW MENU"
-end)
-
-local function createBtn(name, x, y, sizeX, color, callback)
-    local btn = Instance.new("TextButton", panel)
-    btn.Size = UDim2.new(0, sizeX, 0, 38)
-    btn.Position = UDim2.new(0, x, 0, y)
-    btn.Text = name
-    btn.BackgroundColor3 = color
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.GothamBold
-    Instance.new("UICorner", btn)
-    btn.MouseButton1Click:Connect(function() callback(btn) end)
-    return btn
+-- BUTTON
+local function createBtn(name,x,y,w,color,callback)
+    local b = Instance.new("TextButton", panel)
+    b.Size = UDim2.new(0,w,0,40)
+    b.Position = UDim2.new(0,x,0,y)
+    b.Text = name
+    b.BackgroundColor3 = color
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", b)
+    b.MouseButton1Click:Connect(function() callback(b) end)
 end
 
-createBtn("START", 20, 200, 130, Color3.fromRGB(45, 190, 85), function()
+createBtn("START",20,240,130,Color3.fromRGB(0,200,100),function()
     running = true
     startMovementLoop()
 end)
 
-createBtn("STOP", 165, 200, 130, Color3.fromRGB(210, 50, 50), function()
+createBtn("STOP",165,240,130,Color3.fromRGB(220,50,50),function()
     running = false
     stopMover()
 end)
 
-createBtn("FAST MODE", 310, 200, 130, Color3.fromRGB(80, 80, 110), function(b)
+createBtn("FAST MODE",310,240,130,Color3.fromRGB(90,90,120),function(b)
     fastMode = not fastMode
     if fastMode then runFastMode() end
     b.Text = fastMode and "FAST: ON" or "FAST MODE"
 end)
 
-createBtn("AVOID: OFF", 20, 150, 205, Color3.fromRGB(70, 70, 70), function(b)
+createBtn("AVOID",20,190,205,Color3.fromRGB(255,130,0),function(b)
     avoidPlayerEnabled = not avoidPlayerEnabled
     b.Text = avoidPlayerEnabled and "AVOID: ON" or "AVOID: OFF"
 end)
 
--- ANTI AFK
+-- WHITE SCREEN + TIMER
+local whiteLabel
+local startTime = 0
+
+createBtn("WHITE SCREEN",235,190,205,Color3.fromRGB(70,70,100),function(b)
+    whiteScreenOn = not whiteScreenOn
+    b.Text = whiteScreenOn and "WHITE: ON" or "WHITE SCREEN"
+
+    if whiteScreenOn then
+        startTime = os.time()
+
+        local f = Instance.new("Frame", whiteGui)
+        f.Size = UDim2.new(1,0,1,0)
+        f.BackgroundColor3 = Color3.new(1,1,1)
+
+        whiteLabel = Instance.new("TextLabel", f)
+        whiteLabel.Size = UDim2.new(1,0,1,0)
+        whiteLabel.BackgroundTransparency = 1
+        whiteLabel.TextColor3 = Color3.new(0,0,0)
+        whiteLabel.Font = Enum.Font.GothamBold
+
+        task.spawn(function()
+            while whiteScreenOn and whiteLabel do
+                local t = os.time() - startTime
+                whiteLabel.Text = "🦖 FARMING\nTime: "..t.."s"
+                task.wait(1)
+            end
+        end)
+    else
+        if whiteGui:FindFirstChildOfClass("Frame") then
+            whiteGui:FindFirstChildOfClass("Frame"):Destroy()
+        end
+        whiteLabel = nil
+    end
+end)
+
+-- SLIDER (เรียบง่าย)
+local function makeSlider(y, max, default, name, callback)
+    local label = Instance.new("TextLabel", panel)
+    label.Size = UDim2.new(0,420,0,20)
+    label.Position = UDim2.new(0,20,0,y)
+    label.Text = name..": "..default
+    label.TextColor3 = Color3.new(1,1,1)
+    label.BackgroundTransparency = 1
+
+    local bar = Instance.new("TextButton", panel)
+    bar.Size = UDim2.new(0,420,0,10)
+    bar.Position = UDim2.new(0,20,0,y+25)
+    bar.BackgroundColor3 = Color3.fromRGB(0,255,150)
+
+    bar.MouseButton1Down:Connect(function()
+        local val = math.random(1,max)
+        label.Text = name..": "..val
+        callback(val)
+    end)
+end
+
+makeSlider(60,1000,farmSpeed,"Speed Farm",function(v) farmSpeed=v end)
+makeSlider(120,1000,avoidSpeed,"Speed Avoid",function(v) avoidSpeed=v end)
+
+-- AFK
 task.spawn(function()
     while true do
         task.wait(30)
