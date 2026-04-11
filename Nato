@@ -3,7 +3,6 @@ local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
-local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
@@ -76,7 +75,7 @@ local function getDangerPlayer()
     return nearest
 end
 
--- [[ MOVEMENT ]]
+-- [[ MOVEMENT (NO TWEEN) ]]
 local moverConn
 local function stopMover()
     if moverConn then moverConn:Disconnect() moverConn = nil end
@@ -90,56 +89,56 @@ local function startMovementLoop()
         
         -- กันตกแมพ
         if hrp.Position.Y < SAFE_Y then
-            hrp.CFrame = CFrame.new(hrp.Position.X, 50, hrp.Position.Z)
+            hrp.CFrame = CFrame.new(hrp.Position.X, 60, hrp.Position.Z)
             hrp.AssemblyLinearVelocity = Vector3.zero
             return
         end
 
         local danger = getDangerPlayer()
+
         if danger then
+            -- หนีผู้เล่น
             local dir = (hrp.Position - danger.Position).Unit
             local speedToUse = math.max(avoidSpeed, farmSpeed + 20)
 
             local move = dir * (speedToUse * dt)
-            if move.Magnitude > 20 then
-                move = move.Unit * 20
+
+            if move.Magnitude > 15 then
+                move = move.Unit * 15
             end
 
             local newPos = hrp.Position + move
-            newPos = Vector3.new(newPos.X, hrp.Position.Y, newPos.Z)
-
-            TweenService:Create(
-                hrp,
-                TweenInfo.new(0.05, Enum.EasingStyle.Linear),
-                {CFrame = CFrame.new(newPos)}
-            ):Play()
+            hrp.CFrame = CFrame.new(newPos.X, hrp.Position.Y, newPos.Z)
 
         else
+            -- ฟาร์มอาหาร
             local foodPos, dist = nil, math.huge
+
             for _, f in CollectionService:GetTagged("Food") do
                 if f and f.Parent then
                     local p = f:IsA("Model") and f:GetPivot().Position or f.Position
                     local d = (hrp.Position - p).Magnitude
-                    if d < dist then dist = d foodPos = p end
+                    if d < dist then
+                        dist = d
+                        foodPos = p
+                    end
                 end
             end
             
             if foodPos then
                 local diff = foodPos - hrp.Position
-                local currentDist = diff.Magnitude
+                local dist = diff.Magnitude
 
-                if currentDist > 0.1 then
-                    local step = math.min(farmSpeed * dt, currentDist)
-                    local newPos = hrp.Position + (diff.Unit * step)
+                if dist > 0.1 then
+                    local step = math.min(farmSpeed * dt, dist)
+                    local move = diff.Unit * step
 
-                    -- ล็อค Y กันตก
-                    newPos = Vector3.new(newPos.X, hrp.Position.Y, newPos.Z)
+                    if move.Magnitude > 15 then
+                        move = move.Unit * 15
+                    end
 
-                    TweenService:Create(
-                        hrp,
-                        TweenInfo.new(0.05, Enum.EasingStyle.Linear),
-                        {CFrame = CFrame.new(newPos)}
-                    ):Play()
+                    local newPos = hrp.Position + move
+                    hrp.CFrame = CFrame.new(newPos.X, hrp.Position.Y, newPos.Z)
                 end
             else
                 hrp.AssemblyLinearVelocity = Vector3.zero
@@ -148,7 +147,7 @@ local function startMovementLoop()
     end)
 end
 
--- [[ GUI (เหมือนเดิม) ]]
+-- [[ GUI ]]
 local whiteGui = Instance.new("ScreenGui", player.PlayerGui)
 whiteGui.IgnoreGuiInset = true
 whiteGui.DisplayOrder = 1
