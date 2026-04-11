@@ -97,7 +97,13 @@ local function startMovementLoop()
         if danger then
             local dir = (hrp.Position - danger.Position).Unit
             local speedToUse = math.max(avoidSpeed, farmSpeed + 20)
-            hrp.CFrame = CFrame.new(hrp.Position + (dir * (speedToUse * dt)))
+
+            local move = dir * (speedToUse * dt)
+            if move.Magnitude > 20 then
+                move = move.Unit * 20
+            end
+
+            hrp.CFrame = CFrame.new(hrp.Position + move)
         else
             local foodPos, dist = nil, math.huge
             for _, f in CollectionService:GetTagged("Food") do
@@ -113,8 +119,11 @@ local function startMovementLoop()
                 local currentDist = diff.Magnitude
                 if currentDist > 0.1 then
                     local step = math.min(farmSpeed * dt, currentDist)
-                    hrp.CFrame = CFrame.new(hrp.Position + (diff.Unit * step))
+                    local newPos = hrp.Position + (diff.Unit * step)
+                    hrp.CFrame = CFrame.new(newPos.X, hrp.Position.Y, newPos.Z)
                 end
+            else
+                hrp.AssemblyLinearVelocity = Vector3.zero
             end
         end
     end)
@@ -129,16 +138,14 @@ local mainGui = Instance.new("ScreenGui", player.PlayerGui)
 mainGui.DisplayOrder = 99
 mainGui.ResetOnSpawn = false
 
--- PANEL
 local panel = Instance.new("Frame", mainGui)
-panel.Size = UDim2.new(0, 380, 0, 220)
-panel.Position = UDim2.new(0.5, -190, 0.5, -110)
+panel.Size = UDim2.new(0, 460, 0, 270)
+panel.Position = UDim2.new(0.5, -230, 0.5, -135)
 panel.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
 panel.Active = true
 panel.Draggable = true
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 16)
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 18)
 
--- TITLE
 local title = Instance.new("TextLabel", panel)
 title.Size = UDim2.new(1, 0, 0, 40)
 title.Text = "🦖 BE-DINO-FARM"
@@ -146,9 +153,8 @@ title.TextColor3 = Color3.fromRGB(0, 255, 150)
 title.BackgroundColor3 = Color3.fromRGB(28, 28, 45)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
-Instance.new("UICorner", title).CornerRadius = UDim.new(0, 16)
+Instance.new("UICorner", title).CornerRadius = UDim.new(0, 18)
 
--- TOGGLE
 local toggleBtn = Instance.new("TextButton", mainGui)
 toggleBtn.Size = UDim2.new(0, 110, 0, 34)
 toggleBtn.Position = UDim2.new(0, 10, 0, 10)
@@ -163,23 +169,10 @@ toggleBtn.MouseButton1Click:Connect(function()
     toggleBtn.Text = panel.Visible and "HIDE MENU" or "SHOW MENU"
 end)
 
--- GRID
-local layout = Instance.new("UIGridLayout", panel)
-layout.CellSize = UDim2.new(0, 160, 0, 45)
-layout.CellPadding = UDim2.new(0, 10, 0, 10)
-layout.FillDirectionMaxCells = 2
-layout.StartCorner = Enum.StartCorner.TopLeft
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-layout.VerticalAlignment = Enum.VerticalAlignment.Top
-
-local spacer = Instance.new("Frame", panel)
-spacer.Size = UDim2.new(1,0,0,50)
-spacer.BackgroundTransparency = 1
-
--- BUTTON
-local function createBtn(name, color, callback)
+local function createBtn(name, x, y, w, color, callback)
     local btn = Instance.new("TextButton", panel)
-    btn.Size = UDim2.new(0, 150, 0, 45)
+    btn.Size = UDim2.new(0, w, 0, 40)
+    btn.Position = UDim2.new(0, x, 0, y)
     btn.Text = name
     btn.BackgroundColor3 = color
     btn.TextColor3 = Color3.new(1,1,1)
@@ -189,24 +182,31 @@ local function createBtn(name, color, callback)
     return btn
 end
 
-createBtn("START", Color3.fromRGB(0,200,100), function()
+-- BUTTONS
+createBtn("START", 20, 190, 130, Color3.fromRGB(0,200,100), function()
     startTime = os.time()
     running = true
     startMovementLoop()
 end)
 
-createBtn("STOP", Color3.fromRGB(220,50,50), function()
+createBtn("STOP", 165, 190, 130, Color3.fromRGB(220,50,50), function()
     running = false
     stopMover()
 end)
 
-createBtn("FAST MODE", Color3.fromRGB(90,90,120), function(b)
+createBtn("FAST MODE", 310, 190, 130, Color3.fromRGB(90,90,120), function(b)
     fastMode = not fastMode
     if fastMode then runFastMode() end
     b.Text = fastMode and "FAST: ON" or "FAST MODE"
 end)
 
-createBtn("WHITE SCREEN", Color3.fromRGB(70,70,100), function(b)
+createBtn("AVOID: OFF", 20, 140, 205, Color3.fromRGB(70,70,70), function(b)
+    avoidPlayerEnabled = not avoidPlayerEnabled
+    b.Text = avoidPlayerEnabled and "AVOID: ON" or "AVOID: OFF"
+    b.BackgroundColor3 = avoidPlayerEnabled and Color3.fromRGB(255,130,0) or Color3.fromRGB(70,70,70)
+end)
+
+createBtn("WHITE SCREEN", 235, 140, 205, Color3.fromRGB(70,70,100), function(b)
     whiteScreenOn = not whiteScreenOn
     b.Text = whiteScreenOn and "WHITE: ON" or "WHITE SCREEN"
 
@@ -237,6 +237,57 @@ createBtn("WHITE SCREEN", Color3.fromRGB(70,70,100), function(b)
         whiteLabel = nil
     end
 end)
+
+-- SLIDER
+local function makeSlider(y, max, default, name, callback)
+    local label = Instance.new("TextLabel", panel)
+    label.Size = UDim2.new(0, 420, 0, 20)
+    label.Position = UDim2.new(0, 20, 0, y)
+    label.Text = name .. ": " .. default
+    label.TextColor3 = Color3.new(1,1,1)
+    label.BackgroundTransparency = 1
+
+    local track = Instance.new("Frame", panel)
+    track.Size = UDim2.new(0, 420, 0, 8)
+    track.Position = UDim2.new(0, 20, 0, y + 25)
+    track.BackgroundColor3 = Color3.new(0.15, 0.15, 0.25)
+
+    local fill = Instance.new("Frame", track)
+    fill.Size = UDim2.new(default/max, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(0,255,150)
+
+    local knob = Instance.new("TextButton", track)
+    knob.Size = UDim2.new(0, 26, 0, 26)
+    knob.Position = UDim2.new(default/max, -13, 0.5, -13)
+    knob.Text = ""
+    knob.BackgroundColor3 = Color3.new(1,1,1)
+
+    local dragging = false
+
+    knob.InputBegan:Connect(function(input)
+        if input.UserInputType.Name:find("Mouse") or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function()
+        dragging = false
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging then
+            local delta = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+            local val = math.floor(delta * max)
+            fill.Size = UDim2.new(delta,0,1,0)
+            knob.Position = UDim2.new(delta,-13,0.5,-13)
+            label.Text = name .. ": " .. val
+            callback(val)
+        end
+    end)
+end
+
+makeSlider(45, 1000, farmSpeed, "Speed Farm", function(v) farmSpeed = v end)
+makeSlider(95, 1000, avoidSpeed, "Speed Avoid", function(v) avoidSpeed = v end)
 
 -- ANTI AFK
 task.spawn(function()
