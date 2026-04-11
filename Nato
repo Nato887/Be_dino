@@ -115,7 +115,6 @@ local function startMovementLoop()
                 currentTarget = target
                 tweenTo(target, avoidSpeed)
             end
-
         else
             local foodPos, dist = nil, math.huge
 
@@ -134,8 +133,6 @@ local function startMovementLoop()
                 if not currentTarget or (foodPos - currentTarget).Magnitude > 10 then
                     currentTarget = foodPos
                     tweenTo(foodPos, farmSpeed)
-                elseif currentTween == nil then
-                    tweenTo(foodPos, farmSpeed)
                 end
             end
         end
@@ -149,10 +146,14 @@ local mainGui = Instance.new("ScreenGui", player.PlayerGui)
 local panel = Instance.new("Frame", mainGui)
 panel.Size = UDim2.new(0,460,0,300)
 panel.Position = UDim2.new(0.5,-230,0.5,-150)
-panel.BackgroundColor3 = Color3.fromRGB(20,20,30)
+panel.BackgroundColor3 = Color3.fromRGB(40,40,40)
 panel.Active = true
 panel.Draggable = false
 Instance.new("UICorner", panel)
+
+local stroke = Instance.new("UIStroke", panel)
+stroke.Color = Color3.fromRGB(0,255,100)
+stroke.Thickness = 3
 
 local title = Instance.new("TextLabel", panel)
 title.Size = UDim2.new(1,0,0,40)
@@ -206,6 +207,7 @@ local function createBtn(name,x,y,w,color,callback)
     b.Text = name
     b.BackgroundColor3 = color
     b.TextColor3 = Color3.new(1,1,1)
+    Instance.new("UICorner", b)
     b.MouseButton1Click:Connect(function() callback(b) end)
 end
 
@@ -219,8 +221,10 @@ createBtn("STOP",165,240,130,Color3.fromRGB(220,50,50),function()
     stopMover()
 end)
 
-createBtn("FAST",310,240,130,Color3.fromRGB(90,90,120),function()
-    runFastMode()
+createBtn("FAST MODE",310,240,130,Color3.fromRGB(90,90,120),function(b)
+    fastMode = not fastMode
+    if fastMode then runFastMode() end
+    b.Text = fastMode and "FAST: ON" or "FAST MODE"
 end)
 
 createBtn("AVOID",20,190,205,Color3.fromRGB(255,130,0),function(b)
@@ -243,19 +247,27 @@ createBtn("WHITE SCREEN",235,190,205,Color3.fromRGB(70,70,100),function(b)
         f.Name = "Overlay"
         f.Size = UDim2.new(1,0,1,0)
         f.BackgroundColor3 = Color3.new(1,1,1)
+        f.ZIndex = 999999
 
         whiteLabel = Instance.new("TextLabel", f)
         whiteLabel.Size = UDim2.new(1,0,1,0)
         whiteLabel.BackgroundTransparency = 1
         whiteLabel.TextColor3 = Color3.new(0,0,0)
+        whiteLabel.Font = Enum.Font.GothamBlack
         whiteLabel.TextScaled = true
+        whiteLabel.TextStrokeTransparency = 0
 
         task.spawn(function()
             while whiteScreenOn and whiteLabel do
                 local t = os.time() - startTime
-                local m = math.floor(t/60)
+                local h = math.floor(t/3600)
+                local m = math.floor((t%3600)/60)
                 local s = t % 60
-                whiteLabel.Text = "🦖 FARMING\nTime: "..m.."m "..s.."s"
+
+                whiteLabel.Text =
+                    "🦖 FARMING\n\n"..
+                    string.format("Time: %02dh %02dm %02ds",h,m,s)
+
                 task.wait(1)
             end
         end)
@@ -274,18 +286,27 @@ local function makeSlider(y, max, default, name, callback)
     label.Size = UDim2.new(0,420,0,20)
     label.Text = name..": "..default
     label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1,1,1)
 
     local track = Instance.new("Frame", panel)
     track.Position = UDim2.new(0,20,0,y+25)
     track.Size = UDim2.new(0,420,0,8)
+    track.BackgroundColor3 = Color3.fromRGB(120,120,120)
 
     local knob = Instance.new("Frame", track)
     knob.Size = UDim2.new(0,20,0,20)
+    knob.BackgroundColor3 = Color3.new(1,1,1)
+    knob.Position = UDim2.new(default/max,-10,0.5,-10)
+
+    local corner = Instance.new("UICorner", knob)
+    corner.CornerRadius = UDim.new(1,0)
 
     local dragging = false
 
-    knob.InputBegan:Connect(function()
-        dragging = true
+    knob.InputBegan:Connect(function(input)
+        if input.UserInputType.Name:find("Mouse") or input.UserInputType.Name:find("Touch") then
+            dragging = true
+        end
     end)
 
     UserInputService.InputEnded:Connect(function()
