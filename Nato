@@ -3,7 +3,6 @@ local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
-local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 if not player.Character then player.CharacterAdded:Wait() end
@@ -16,10 +15,7 @@ local avoidDistance = 150
 local whiteScreenOn = false
 local avoidPlayerEnabled = false
 local fastMode = false
-
-local currentTween = nil
-local currentTarget = nil
-local startTime = os.time() -- 🔥 ไม่รี
+local startTime = os.time()
 
 -- UTILS
 local function getHRP(target)
@@ -70,46 +66,29 @@ local function getDangerPlayer()
     return nearest
 end
 
--- TWEEN FIX
-local function tweenTo(pos, speed)
+-- 🔥 MOVE SYSTEM (แทน Tween)
+local function moveTo(targetPos, speed, dt)
     local hrp = getHRP()
     if not hrp then return end
 
-    if currentTween then
-        currentTween:Cancel()
-        currentTween = nil
-    end
+    local diff = targetPos - hrp.Position
+    local dist = diff.Magnitude
+    if dist < 2 then return end
 
-    local dist = (hrp.Position - pos).Magnitude
-    if dist < 3 then return end
-
-    local time = math.clamp(dist / speed, 0.1, 5)
-
-    currentTween = TweenService:Create(
-        hrp,
-        TweenInfo.new(time, Enum.EasingStyle.Linear),
-        {CFrame = CFrame.new(pos)}
-    )
-
-    currentTween:Play()
-
-    currentTween.Completed:Connect(function()
-        currentTween = nil
-    end)
+    local step = math.min(speed * dt, dist)
+    hrp.CFrame = CFrame.new(hrp.Position + diff.Unit * step)
 end
 
 -- LOOP
 local moverConn
 local function stopMover()
     if moverConn then moverConn:Disconnect() moverConn = nil end
-    if currentTween then currentTween:Cancel() end
 end
 
 local function startMovementLoop()
     stopMover()
-    currentTarget = nil
 
-    moverConn = RunService.Heartbeat:Connect(function()
+    moverConn = RunService.Heartbeat:Connect(function(dt)
         local hrp = getHRP()
         if not hrp or not running then return end
 
@@ -118,11 +97,8 @@ local function startMovementLoop()
         if danger then
             local dir = (hrp.Position - danger.Position).Unit
             local target = hrp.Position + dir * 120
+            moveTo(target, avoidSpeed, dt)
 
-            if not currentTarget or (target - currentTarget).Magnitude > 20 then
-                currentTarget = target
-                tweenTo(target, avoidSpeed)
-            end
         else
             local foodPos, dist = nil, math.huge
 
@@ -138,12 +114,7 @@ local function startMovementLoop()
             end
 
             if foodPos then
-                if not currentTarget or (foodPos - currentTarget).Magnitude > 5 then
-                    currentTarget = foodPos
-                    tweenTo(foodPos, farmSpeed)
-                elseif not currentTween then
-                    tweenTo(foodPos, farmSpeed)
-                end
+                moveTo(foodPos, farmSpeed, dt)
             end
         end
     end)
@@ -246,7 +217,7 @@ createBtn("AVOID",20,190,205,Color3.fromRGB(255,130,0),function(b)
     b.Text = avoidPlayerEnabled and "AVOID: ON" or "AVOID: OFF"
 end)
 
--- WHITE SCREEN FIX
+-- WHITE SCREEN
 local whiteLabel
 
 createBtn("WHITE SCREEN",235,190,205,Color3.fromRGB(70,70,100),function(b)
@@ -256,9 +227,8 @@ createBtn("WHITE SCREEN",235,190,205,Color3.fromRGB(70,70,100),function(b)
     if whiteScreenOn then
         if whiteGui:FindFirstChild("Overlay") then return end
 
-        local f = Instance.new("Frame")
+        local f = Instance.new("Frame", whiteGui)
         f.Name = "Overlay"
-        f.Parent = whiteGui
         f.Size = UDim2.new(1,0,1,0)
         f.BackgroundColor3 = Color3.new(1,1,1)
         f.ZIndex = 999999
