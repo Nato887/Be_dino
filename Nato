@@ -18,7 +18,9 @@ local whiteScreenOn = false
 local avoidPlayerEnabled = false
 local fastMode = false
 
+-- TWEEN STATE
 local currentTween = nil
+local currentTarget = nil
 
 -- UTILS
 local function getHRP(target)
@@ -69,57 +71,57 @@ local function getDangerPlayer()
     return nearest
 end
 
--- TWEEN
-local function stopTween()
-    if currentTween then
-        currentTween:Cancel()
-        currentTween = nil
-    end
-end
-
+-- TWEEN MOVE (FIXED)
 local function tweenTo(pos, speed)
     local hrp = getHRP()
     if not hrp then return end
 
-    stopTween()
+    if currentTween then
+        currentTween:Cancel()
+    end
 
     local dist = (hrp.Position - pos).Magnitude
+    if dist < 2 then return end
+
     local time = dist / speed
 
-    local tween = TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {
-        CFrame = CFrame.new(pos)
-    })
+    currentTween = TweenService:Create(
+        hrp,
+        TweenInfo.new(time, Enum.EasingStyle.Linear),
+        {CFrame = CFrame.new(pos)}
+    )
 
-    currentTween = tween
-    tween:Play()
+    currentTween:Play()
 end
 
--- LOOP
+-- LOOP (FIXED)
 local moverConn
 local function stopMover()
     if moverConn then moverConn:Disconnect() moverConn = nil end
-    stopTween()
+    if currentTween then currentTween:Cancel() end
 end
 
 local function startMovementLoop()
     stopMover()
+
     moverConn = RunService.Heartbeat:Connect(function()
         local hrp = getHRP()
         if not hrp or not running then return end
-
-        if hrp.Position.Y < SAFE_Y then
-            hrp.CFrame = CFrame.new(0,50,0)
-            stopTween()
-            return
-        end
 
         local danger = getDangerPlayer()
 
         if danger then
             local dir = (hrp.Position - danger.Position).Unit
-            tweenTo(hrp.Position + dir * 100, avoidSpeed)
+            local target = hrp.Position + dir * 120
+
+            if not currentTarget or (target - currentTarget).Magnitude > 20 then
+                currentTarget = target
+                tweenTo(target, avoidSpeed)
+            end
+
         else
             local foodPos, dist = nil, math.huge
+
             for _, f in CollectionService:GetTagged("Food") do
                 if f and f.Parent then
                     local p = f:IsA("Model") and f:GetPivot().Position or f.Position
@@ -130,8 +132,12 @@ local function startMovementLoop()
                     end
                 end
             end
+
             if foodPos then
-                tweenTo(foodPos, farmSpeed)
+                if not currentTarget or (foodPos - currentTarget).Magnitude > 10 then
+                    currentTarget = foodPos
+                    tweenTo(foodPos, farmSpeed)
+                end
             end
         end
     end)
@@ -158,7 +164,6 @@ title.TextColor3 = Color3.fromRGB(0,255,150)
 title.BackgroundColor3 = Color3.fromRGB(30,30,45)
 title.Font = Enum.Font.GothamBold
 
--- BUTTON
 local function createBtn(name,x,y,w,color,callback)
     local b = Instance.new("TextButton", panel)
     b.Size = UDim2.new(0,w,0,40)
@@ -228,7 +233,7 @@ createBtn("WHITE SCREEN",235,190,205,Color3.fromRGB(70,70,100),function(b)
     end
 end)
 
--- SLIDER (เรียบง่าย)
+-- SLIDER
 local function makeSlider(y, max, default, name, callback)
     local label = Instance.new("TextLabel", panel)
     label.Size = UDim2.new(0,420,0,20)
