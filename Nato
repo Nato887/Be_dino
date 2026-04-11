@@ -17,7 +17,7 @@ local whiteScreenOn = false
 local avoidPlayerEnabled = false
 local fastMode = false
 
--- ⏱️ เวลาเริ่มต้น
+-- ⏱️ เวลาเริ่ม
 local startTime = os.time()
 
 -- [[ UTILS ]]
@@ -33,7 +33,6 @@ local function getGrowth(plr)
     return 0
 end
 
--- ⏱️ แปลงเวลา
 local function formatTime(sec)
     local h = math.floor(sec / 3600)
     local m = math.floor((sec % 3600) / 60)
@@ -53,7 +52,7 @@ local function runFastMode()
     end
 end
 
--- [[ AVOID PLAYER LOGIC ]]
+-- [[ AVOID PLAYER ]]
 local function getDangerPlayer()
     if not avoidPlayerEnabled then return nil end
     local hrp = getHRP()
@@ -77,9 +76,11 @@ local function getDangerPlayer()
     return nearest
 end
 
--- [[ MOVEMENT SYSTEM ]]
+-- [[ MOVEMENT ]]
 local moverConn
-local function stopMover() if moverConn then moverConn:Disconnect() moverConn = nil end end
+local function stopMover()
+    if moverConn then moverConn:Disconnect() moverConn = nil end
+end
 
 local function startMovementLoop()
     stopMover()
@@ -128,26 +129,30 @@ local mainGui = Instance.new("ScreenGui", player.PlayerGui)
 mainGui.DisplayOrder = 99
 mainGui.ResetOnSpawn = false
 
+-- PANEL
 local panel = Instance.new("Frame", mainGui)
-panel.Size = UDim2.new(0, 460, 0, 260)
-panel.Position = UDim2.new(0.5, -230, 0.5, -130)
-panel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+panel.Size = UDim2.new(0, 380, 0, 220)
+panel.Position = UDim2.new(0.5, -190, 0.5, -110)
+panel.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
 panel.Active = true
 panel.Draggable = true
-Instance.new("UICorner", panel)
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 16)
 
+-- TITLE
 local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1, 0, 0, 35)
-title.Text = "🦖 BE-DINO-FARM-NT FINAL 1000%"
+title.Size = UDim2.new(1, 0, 0, 40)
+title.Text = "🦖 BE-DINO-FARM"
 title.TextColor3 = Color3.fromRGB(0, 255, 150)
-title.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+title.BackgroundColor3 = Color3.fromRGB(28, 28, 45)
 title.Font = Enum.Font.GothamBold
-Instance.new("UICorner", title)
+title.TextSize = 16
+Instance.new("UICorner", title).CornerRadius = UDim.new(0, 16)
 
+-- TOGGLE
 local toggleBtn = Instance.new("TextButton", mainGui)
-toggleBtn.Size = UDim2.new(0, 100, 0, 32)
+toggleBtn.Size = UDim2.new(0, 110, 0, 34)
 toggleBtn.Position = UDim2.new(0, 10, 0, 10)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
 toggleBtn.Text = "HIDE MENU"
 toggleBtn.TextColor3 = Color3.new(1,1,1)
 toggleBtn.Font = Enum.Font.GothamBold
@@ -158,10 +163,23 @@ toggleBtn.MouseButton1Click:Connect(function()
     toggleBtn.Text = panel.Visible and "HIDE MENU" or "SHOW MENU"
 end)
 
-local function createBtn(name, x, y, sizeX, color, callback)
+-- GRID
+local layout = Instance.new("UIGridLayout", panel)
+layout.CellSize = UDim2.new(0, 160, 0, 45)
+layout.CellPadding = UDim2.new(0, 10, 0, 10)
+layout.FillDirectionMaxCells = 2
+layout.StartCorner = Enum.StartCorner.TopLeft
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.VerticalAlignment = Enum.VerticalAlignment.Top
+
+local spacer = Instance.new("Frame", panel)
+spacer.Size = UDim2.new(1,0,0,50)
+spacer.BackgroundTransparency = 1
+
+-- BUTTON
+local function createBtn(name, color, callback)
     local btn = Instance.new("TextButton", panel)
-    btn.Size = UDim2.new(0, sizeX, 0, 38)
-    btn.Position = UDim2.new(0, x, 0, y)
+    btn.Size = UDim2.new(0, 150, 0, 45)
     btn.Text = name
     btn.BackgroundColor3 = color
     btn.TextColor3 = Color3.new(1,1,1)
@@ -171,27 +189,26 @@ local function createBtn(name, x, y, sizeX, color, callback)
     return btn
 end
 
-createBtn("START", 20, 200, 130, Color3.fromRGB(45, 190, 85), function()
-    startTime = os.time() -- รีเซ็ตเวลา
+createBtn("START", Color3.fromRGB(0,200,100), function()
+    startTime = os.time()
     running = true
     startMovementLoop()
 end)
 
-createBtn("STOP", 165, 200, 130, Color3.fromRGB(210, 50, 50), function()
+createBtn("STOP", Color3.fromRGB(220,50,50), function()
     running = false
     stopMover()
 end)
 
-createBtn("FAST MODE", 310, 200, 130, Color3.fromRGB(80, 80, 110), function(b)
+createBtn("FAST MODE", Color3.fromRGB(90,90,120), function(b)
     fastMode = not fastMode
     if fastMode then runFastMode() end
     b.Text = fastMode and "FAST: ON" or "FAST MODE"
-    b.BackgroundColor3 = fastMode and Color3.fromRGB(0, 160, 255) or Color3.fromRGB(80, 80, 110)
 end)
 
-createBtn("WHITE SCREEN", 235, 150, 205, Color3.fromRGB(50, 50, 80), function(b)
+createBtn("WHITE SCREEN", Color3.fromRGB(70,70,100), function(b)
     whiteScreenOn = not whiteScreenOn
-    b.Text = whiteScreenOn and "WHITE SCREEN: ON" or "WHITE SCREEN"
+    b.Text = whiteScreenOn and "WHITE: ON" or "WHITE SCREEN"
 
     if whiteScreenOn then
         local f = Instance.new("Frame", whiteGui)
@@ -204,13 +221,12 @@ createBtn("WHITE SCREEN", 235, 150, 205, Color3.fromRGB(50, 50, 80), function(b)
         whiteLabel.BackgroundTransparency = 1
         whiteLabel.TextColor3 = Color3.new(0, 0, 0)
         whiteLabel.Font = Enum.Font.GothamBold
-        whiteLabel.TextSize = 25
+        whiteLabel.TextSize = 24
 
         task.spawn(function()
             while whiteScreenOn and whiteLabel do
                 local elapsed = os.time() - startTime
-                whiteLabel.Text = "🦖 FARMING...\nเวลา: "..formatTime(elapsed)..
-                                  "\nFarm Spd: "..farmSpeed.." | Avoid Spd: "..avoidSpeed
+                whiteLabel.Text = "🦖 FARMING...\nเวลา: "..formatTime(elapsed)
                 task.wait(1)
             end
         end)
